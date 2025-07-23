@@ -48,8 +48,9 @@ __global__ void x_gate_kernel(cuDoubleComplex *amplitudes, int num_qubits,
   if (i < num_amplitudes) {
     if (!((i >> target_qubit) & 1)) {
       size_t j = i | (1ULL << target_qubit);
-      // Replace std::swap with a manual swap
+
       cuDoubleComplex temp = amplitudes[i];
+
       amplitudes[i] = amplitudes[j];
       amplitudes[j] = temp;
     }
