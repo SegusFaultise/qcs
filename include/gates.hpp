@@ -24,5 +24,6 @@ void apply_X_gate(struct QuantumState &state, int target_qubit);
 void apply_Y_gate(struct QuantumState &state, int target_qubit);
 void apply_CNOT_gate(struct QuantumState &state, int control_qubit,
                      int target_qubit);
+void create_GHZ_state(QuantumState &state);
 
 #endif // GATES_HPP
