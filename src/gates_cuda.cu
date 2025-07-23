@@ -1,12 +1,12 @@
-#include "../include/gates_cuda.cuh"
 #include <complex>
-#include <cuComplex.h> // Use CUDA's complex number header
+#include <cuComplex.h>
 #include <cuda_runtime.h>
 #include <iostream>
 #include <stdexcept>
 #include <vector>
 
-// Helper macro to check for CUDA errors
+#include "../include/gates_cuda.cuh"
+
 #define CUDA_CHECK(err)                                                        \
   {                                                                            \
     if (err != cudaSuccess) {                                                  \
@@ -14,9 +14,6 @@
                                cudaGetErrorString(err));                       \
     }                                                                          \
   }
-
-// --- CUDA Kernels (Device Code) ---
-// Note: All kernels now use cuDoubleComplex instead of std::complex<double>
 
 __global__ void h_gate_kernel(cuDoubleComplex *amplitudes, int num_qubits,
                               int target_qubit) {
@@ -94,7 +91,6 @@ __global__ void cnot_gate_kernel(cuDoubleComplex *amplitudes, int num_qubits,
 }
 
 // --- Host-Callable Wrappers (Host Code) ---
-// This is a generic helper function to reduce code duplication
 void launch_kernel(QuantumState &state, const void *kernel, int target_qubit,
                    int control_qubit = -1) {
   size_t num_amplitudes = state.amplitudes.size();
@@ -102,8 +98,6 @@ void launch_kernel(QuantumState &state, const void *kernel, int target_qubit,
   cuDoubleComplex *d_amplitudes;
 
   CUDA_CHECK(cudaMalloc(&d_amplitudes, vector_size_bytes));
-  // Use reinterpret_cast because std::complex and cuDoubleComplex have
-  // compatible memory layouts
   CUDA_CHECK(cudaMemcpy(d_amplitudes,
                         reinterpret_cast<const void *>(state.amplitudes.data()),
                         vector_size_bytes, cudaMemcpyHostToDevice));
@@ -112,7 +106,6 @@ void launch_kernel(QuantumState &state, const void *kernel, int target_qubit,
   int blocks_per_grid =
       (num_amplitudes + threads_per_block - 1) / threads_per_block;
 
-  // Launch the correct kernel based on the function pointer
   if (kernel == (const void *)h_gate_kernel) {
     h_gate_kernel<<<blocks_per_grid, threads_per_block>>>(
         d_amplitudes, state.num_qubits, target_qubit);
