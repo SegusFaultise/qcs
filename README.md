@@ -34,12 +34,12 @@ The `Makefile` provides several targets to build the different versions of the s
 
 * **Build only the classical (single-threaded) version:**
     ```bash
-    make classical
+    make run_classical
     ```
 
 * **Build only the parallel (multi-threaded) version:**
     ```bash
-    make parallel
+    make run_parallel
     ```
 
 The compiled executables (`quantum_simulator_classical` and `quantum_simulator_parallel`) will be placed in the `build/` directory.
