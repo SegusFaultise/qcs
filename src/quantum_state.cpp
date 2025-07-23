@@ -1,6 +1,26 @@
 #include <cstddef>
+#include <iostream>
 
 #include "../include/quantum_state.hpp"
+
+void print_state(const QuantumState &state) {
+  std::cout << "--- Quantum State ---\n";
+
+  for (size_t i = 0; i < state.amplitudes.size(); ++i) {
+    if (std::abs(state.amplitudes[i].real()) > 1e-9 ||
+        std::abs(state.amplitudes[i].imag()) > 1e-9) {
+
+      std::cout << "  |";
+
+      for (int j = state.num_qubits - 1; j >= 0; --j) {
+        std::cout << ((i >> j) & 1);
+      }
+
+      std::cout << "> : " << state.amplitudes[i] << std::endl;
+    }
+  }
+  std::cout << "---------------------\n";
+}
 
 struct QuantumState init_state(int num_qbits) {
   struct QuantumState state;
