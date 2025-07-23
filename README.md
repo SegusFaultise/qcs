@@ -4,9 +4,10 @@ A high-performance quantum circuit simulator written in C++. This project provid
 The simulator is configured via a simple TOML file, allowing users to define the number of qubits and the sequence of quantum gates to apply.
 
 ## Features
-* **Dual Simulation Modes**:
+* **Three Simulation Modes**:
     * **Classical**: A single-threaded implementation for correctness and baseline performance.
-    * **Parallel**: A multi-threaded version using OpenMP for significant speedup on multi-core processors, especially for a high number of qubits.
+    * **Parallel CPU (OpenMP)**: A multi-threaded version for significant speedup on multi-core processors.
+    * **Parallel GPU (CUDA)**: A massively parallel version for extreme-scale simulations on NVIDIA GPUs.
 * **Configurable Circuits**: Define quantum circuits easily using the `quantum_circuit_config.toml` file.
 * **Core Quantum Gates Implemented**:
     * **H**: Hadamard Gate
@@ -15,31 +16,38 @@ The simulator is configured via a simple TOML file, allowing users to define the
     * **CNOT**: Controlled-NOT Gate
 * **High-Level Circuit Recipes**:
     * **GHZ**: A built-in function to generate a Greenberger–Horne–Zeilinger (GHZ) state.
-* **Built-in Benchmarking**: Accurately measure and compare the execution time of the classical vs. parallel versions.
+* **Built-in Benchmarking**: Accurately measure and compare the execution time of the different versions.
 
 ## Prerequisites
+
 To build and run this project, you will need:
 * A C++17 compliant compiler (e.g., `g++`)
 * `make`
-* OpenMP support in your compiler (for the parallel version)
+* OpenMP support in your compiler (for the parallel CPU version)
+* **NVIDIA CUDA Toolkit** (for the parallel GPU version)
 
 ## Building the Simulator
 
 The `Makefile` provides several targets to build the different versions of the simulator.
 
-* **Build both versions:**
+* **Build the CPU versions (default):**
     ```bash
     make all
     ```
 
-* **Build only the classical (single-threaded) version:**
+* **Build only the classical version:**
     ```bash
-    make run_classical
+    make classical
     ```
 
-* **Build only the parallel (multi-threaded) version:**
+* **Build only the parallel CPU version:**
     ```bash
-    make run_parallel
+    make parallel_cpu
+    ```
+
+* **Build the optional GPU version:**
+    ```bash
+    make parallel_gpu
     ```
 
 The compiled executables (`quantum_simulator_classical` and `quantum_simulator_parallel`) will be placed in the `build/` directory.
@@ -78,4 +86,23 @@ targets = [0, 1]
 
 [[gates]]
 name = "GHZ"
-targets = [] 
+targets = []
+```
+## Running the Simulator
+
+The `Makefile` provides several targets to run the different versions of the simulator.
+
+* **Run the classicaL CPU version:**
+    ```bash
+    make run_classical
+    ```
+
+* **Run the parallel CPU version:**
+    ```bash
+    make run_parallel_cpu
+    ```
+
+* **Run the parallel GPU version:**
+    ```bash
+    make run_parallel_gpu
+    ```
