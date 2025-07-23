@@ -29,8 +29,6 @@ __global__ void h_gate_kernel(cuDoubleComplex *amplitudes, int num_qubits,
 
       const double inv_sqrt2 = 1.0 / 1.4142135623730951;
 
-      // Use cuCadd and cuCsub for complex arithmetic if direct operators fail,
-      // but modern CUDA often overloads them correctly.
       amplitudes[i] = make_cuDoubleComplex(cuCreal(c_i) + cuCreal(c_j),
                                            cuCimag(c_i) + cuCimag(c_j));
       amplitudes[i] = cuCmul(amplitudes[i], make_cuDoubleComplex(inv_sqrt2, 0));
