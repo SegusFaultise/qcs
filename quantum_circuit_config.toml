@@ -1,0 +1,9 @@
+qubits = 10
+
+[[gates]]
+name = "H"
+targets = [0]
+
+[[gates]]
+name = "CNOT"
+targets = [0, 1]
