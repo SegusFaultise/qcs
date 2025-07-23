@@ -1,8 +1,8 @@
 #ifndef QUANTUM_RUNNER_HPP
 #define QUANTUM_RUNNER_HPP
 
-#include "quantum_simulation_options.hpp"
-#include "quantum_state.hpp"
+#include "simulation_options.hpp"
+#include "state.hpp"
 
 void run_circuit(QuantumState &state, const CircuitOptions &options);
 

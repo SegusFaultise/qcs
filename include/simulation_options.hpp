@@ -1,5 +1,5 @@
-#ifndef QUANTUM_SIMULATION_OPTIONS_HPP
-#define QUANTUM_SIMULATION_OPTIONS_HPP
+#ifndef SIMULATION_OPTIONS_HPP
+#define SIMULATION_OPTIONS_HPP
 
 #include <optional>
 #include <string>
@@ -38,4 +38,4 @@ load_circuit_options(const std::string &file_path);
  */
 void print_options(const CircuitOptions &options);
 
-#endif // QUANTUM_SIMULATION_OPTIONS_HPP
+#endif // SIMULATION_OPTIONS_HPP

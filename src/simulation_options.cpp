@@ -1,6 +1,6 @@
 #include <iostream>
 
-#include "../include/quantum_simulation_options.hpp"
+#include "../include/simulation_options.hpp"
 #include "../lib/toml++/toml.hpp"
 
 /**

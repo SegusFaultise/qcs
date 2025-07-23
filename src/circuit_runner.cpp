@@ -5,14 +5,13 @@
 
 #include "../include/circuit_runner.hpp"
 #include "../include/gates.hpp"
+#include "../include/state.hpp"
 
 void run_circuit(QuantumState &state, const CircuitOptions &options) {
   std::cout << "\n--- Running Quantum Circuit ---" << std::endl;
 
   static const std::map<std::string, int> operation_map = {
-      {"H", 1}, {"X", 2}, {"Y", 3}, {"CNOT", 4}, {"GHZ", 100}
-      // High-level operations can have a different ID range
-  };
+      {"H", 1}, {"X", 2}, {"Y", 3}, {"CNOT", 4}, {"GHZ", 100}};
 
   for (const auto &op : options.gates) {
     std::cout << "Executing operation: " << op.name;
@@ -54,7 +53,6 @@ void run_circuit(QuantumState &state, const CircuitOptions &options) {
 
     case 4: // CNOT gate
       if (op.targets.size() >= 2) {
-        // Convention: first target is control, second is target
         apply_CNOT_gate(state, op.targets[0], op.targets[1]);
       }
       break;

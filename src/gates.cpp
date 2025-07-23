@@ -9,6 +9,15 @@
 #include <omp.h>
 #endif
 
+/**
+ * @brief Applies a Hadamard (H) gate to a target qubit.
+ *
+ * The H-gate transforms a qubit into an equal superposition of |0> and |1>,
+ * forming the basis for many quantum algorithms.
+ *
+ * @param state The quantum state to modify (passed by reference).
+ * @param target_qubit The index of the qubit to apply the gate to.
+ */
 void apply_H_gate(QuantumState &state, int target_qubit) {
   if (target_qubit < 0 || target_qubit >= state.num_qubits)
     throw std::out_of_range("H-gate target qubit index is out of range.");
@@ -18,7 +27,6 @@ void apply_H_gate(QuantumState &state, int target_qubit) {
 #ifdef _OPENMP
 #pragma omp parallel for
 #endif
-
   for (size_t i = 0; i < num_amplitudes; ++i) {
     if (!((i >> target_qubit) & 1)) {
       size_t j = i | (1ULL << target_qubit);
@@ -30,6 +38,15 @@ void apply_H_gate(QuantumState &state, int target_qubit) {
   }
 }
 
+/**
+ * @brief Applies a Pauli-X (NOT) gate to a target qubit.
+ *
+ * The X-gate is the quantum equivalent of a classical NOT gate, flipping
+ * the state of the target qubit (|0> becomes |1>, and |1> becomes |0>).
+ *
+ * @param state The quantum state to modify (passed by reference).
+ * @param target_qubit The index of the qubit to flip.
+ */
 void apply_X_gate(QuantumState &state, int target_qubit) {
   if (target_qubit < 0 || target_qubit >= state.num_qubits)
     throw std::out_of_range("X-gate target qubit index is out of range.");
@@ -39,7 +56,6 @@ void apply_X_gate(QuantumState &state, int target_qubit) {
 #ifdef _OPENMP
 #pragma omp parallel for
 #endif
-
   for (size_t i = 0; i < num_amplitudes; ++i) {
     if (!((i >> target_qubit) & 1)) {
       size_t j = i | (1ULL << target_qubit);
@@ -48,6 +64,15 @@ void apply_X_gate(QuantumState &state, int target_qubit) {
   }
 }
 
+/**
+ * @brief Applies a Pauli-Y gate to a target qubit.
+ *
+ * The Y-gate rotates the qubit state around the Y-axis of the Bloch sphere.
+ * It maps |0> to i|1> and |1> to -i|0>.
+ *
+ * @param state The quantum state to modify (passed by reference).
+ * @param target_qubit The index of the qubit to apply the gate to.
+ */
 void apply_Y_gate(QuantumState &state, int target_qubit) {
   if (target_qubit < 0 || target_qubit >= state.num_qubits)
     throw std::out_of_range("Y-gate target qubit index is out of range.");
@@ -58,7 +83,6 @@ void apply_Y_gate(QuantumState &state, int target_qubit) {
 #ifdef _OPENMP
 #pragma omp parallel for
 #endif
-
   for (size_t k = 0; k < num_amplitudes; ++k) {
     if (!((k >> target_qubit) & 1)) {
       size_t j = k | (1ULL << target_qubit);
@@ -70,6 +94,16 @@ void apply_Y_gate(QuantumState &state, int target_qubit) {
   }
 }
 
+/**
+ * @brief Applies a Controlled-NOT (CNOT) gate.
+ *
+ * This gate performs an X-gate on the target qubit if and only if the
+ * control qubit is in the state |1>. It is essential for creating entanglement.
+ *
+ * @param state The quantum state to modify (passed by reference).
+ * @param control_qubit The index of the control qubit.
+ * @param target_qubit The index of the target qubit.
+ */
 void apply_CNOT_gate(QuantumState &state, int control_qubit, int target_qubit) {
   if (control_qubit < 0 || control_qubit >= state.num_qubits ||
       target_qubit < 0 || target_qubit >= state.num_qubits ||
@@ -83,7 +117,6 @@ void apply_CNOT_gate(QuantumState &state, int control_qubit, int target_qubit) {
 #ifdef _OPENMP
 #pragma omp parallel for
 #endif
-
   for (size_t i = 0; i < num_amplitudes; ++i) {
     if ((i >> control_qubit) & 1) {
       if (!((i >> target_qubit) & 1)) {
@@ -92,20 +125,4 @@ void apply_CNOT_gate(QuantumState &state, int control_qubit, int target_qubit) {
       }
     }
   }
-}
-
-void create_GHZ_state(QuantumState &state) {
-  if (state.num_qubits < 3)
-    throw std::invalid_argument(
-        "GHZ state creation requires at least 3 qubits.");
-
-  std::cout << "\n--- Building GHZ State ---" << std::endl;
-
-  apply_H_gate(state, 0);
-
-  for (int i = 1; i < state.num_qubits; ++i) {
-    apply_CNOT_gate(state, 0, i);
-  }
-
-  std::cout << "--- GHZ State Creation Complete ---\n" << std::endl;
 }

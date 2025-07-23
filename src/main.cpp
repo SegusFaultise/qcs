@@ -3,8 +3,8 @@
 
 #include "../include/benchmark.hpp"
 #include "../include/circuit_runner.hpp"
-#include "../include/quantum_simulation_options.hpp"
-#include "../include/quantum_state.hpp"
+#include "../include/simulation_options.hpp"
+#include "../include/state.hpp"
 
 int main() {
   auto options_opt = load_circuit_options("quantum_circuit_config.toml");
