@@ -17,23 +17,22 @@ struct t_complex c_from_real(double real);
 double c_norm_sq(struct t_complex a);
 double c_magnitude(double real);
 
-/* QUANTUM STATE */
+/* QUANTUM STATE VECTOR */
 struct t_q_state {
   int qubits_num;
   int size;
-
   struct t_complex *vector;
 };
 
 struct t_q_state *q_state_init(int qubits_num);
 void q_state_free(struct t_q_state *state);
 void q_state_set_basis(struct t_q_state *state, int index_basis);
+void q_state_print(const struct t_q_state *state);
 
 /* QUANTUM MATRIX */
 struct t_q_matrix {
   int rows;
   int cols;
-
   struct t_complex *data;
 };
 
