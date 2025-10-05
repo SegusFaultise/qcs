@@ -6,10 +6,8 @@
 int main() {
   struct t_q_state *state = NULL;
   struct t_q_matrix *H = NULL;
-  struct t_q_matrix *Oracle = NULL;
-  struct t_q_matrix *U0 = NULL;
 
-  int num_qubits = 3;
+  int num_qubits = 15;
   int solution_index = 6;
   int num_iterations;
   int i, q;
@@ -38,15 +36,7 @@ int main() {
   q_state_normalize(state);
   q_state_print(state);
 
-  Oracle = q_gate_oracle(num_qubits, solution_index);
-  U0 = q_gate_U0(num_qubits);
-  if (Oracle == NULL || U0 == NULL) {
-    return 1;
-  }
-
   for (i = 0; i < num_iterations; i++) {
-    printf("\n--- Iteration %d ---\n", i + 1);
-
     q_apply_phase_flip(state, solution_index);
 
     for (q = 0; q < num_qubits; q++) {
@@ -66,8 +56,6 @@ int main() {
   q_state_print(state);
 
   q_matrix_free(H);
-  q_matrix_free(Oracle);
-  q_matrix_free(U0);
   q_state_free(state);
 
   printf("\n--- Test Complete ---\n");

@@ -7,7 +7,7 @@ LOG_FILE = $(BUILD_DIR)/$(TARGET).build_log
 CC = gcc
 C_STANDARD = std=c89
 
-CFLAGS = -Wall -Wextra -pedantic -std=c89 -g -I$(INCLUDE_DIR)
+CFLAGS = -Wall -Wextra -pedantic -std=c89 -pg -g -I$(INCLUDE_DIR)
 LDFLAGS = -lm
 
 SRCS := $(wildcard $(SRC_DIR)/*.c)

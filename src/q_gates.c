@@ -102,7 +102,9 @@ void q_apply_phase_flip(struct t_q_state *state, int target_index) {
 void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
                      int target_qubit) {
   struct t_complex *vector = state->vector;
-  struct t_complex *new_vector;
+  struct t_complex *new_vector =
+      state->scratch_vector; /* 👈 Use scratch buffer */
+  struct t_complex *temp;
   int k;
   int i;
 
@@ -115,45 +117,38 @@ void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
     return;
   }
 
-  new_vector =
-      (struct t_complex *)malloc(state->size * sizeof(struct t_complex));
-
-  if (new_vector == NULL) {
-    fprintf(stderr, "Error: Memory allocation failed for new_vector.\n");
-    return;
-  }
-
   k = 1 << target_qubit;
 
-  for (i = 0; i < state->size / 2; i++) {
-    int i0;
-    int i1;
+  /* NOTE: The index calculation is simplified in the modern implementation.
+     We will keep your original structure but ensure the core logic is sound. */
 
-    i0 = (i & ~(k - 1)) | (i & (k - 1));
+  for (i = 0; i < state->size; i++) {
+    if ((i & k) == 0) {
+      int i0 = i;
+      int i1 = i | k;
 
-    int i_base = (i / k) * (k << 1) + (i % k);
+      struct t_complex amp0 = vector[i0];
+      struct t_complex amp1 = vector[i1];
 
-    i0 = i_base;
-    i1 = i_base | k;
+      new_vector[i0] =
+          c_add(c_mul(gate->data[0], amp0), c_mul(gate->data[1], amp1));
 
-    struct t_complex amp0 = vector[i0];
-    struct t_complex amp1 = vector[i1];
-
-    new_vector[i0] =
-        c_add(c_mul(gate->data[0], amp0), c_mul(gate->data[1], amp1));
-
-    new_vector[i1] =
-        c_add(c_mul(gate->data[2], amp0), c_mul(gate->data[3], amp1));
+      new_vector[i1] =
+          c_add(c_mul(gate->data[2], amp0), c_mul(gate->data[3], amp1));
+    }
   }
 
-  free(state->vector);
+  temp = state->vector;
   state->vector = new_vector;
+  state->scratch_vector = temp;
 }
 
 void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
                      int control_qubit, int target_qubit) {
   struct t_complex *vector = state->vector;
-  struct t_complex *new_vector;
+  struct t_complex *new_vector =
+      state->scratch_vector; /* 👈 Use scratch buffer */
+  struct t_complex *temp;
   int size = state->size;
 
   int c_bit = 1 << control_qubit;
@@ -167,12 +162,6 @@ void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
   if (control_qubit == target_qubit || control_qubit < 0 || target_qubit < 0 ||
       control_qubit >= state->qubits_num || target_qubit >= state->qubits_num) {
     fprintf(stderr, "Error: Invalid control/target qubit indices.\n");
-    return;
-  }
-
-  new_vector = (struct t_complex *)malloc(size * sizeof(struct t_complex));
-  if (new_vector == NULL) {
-    fprintf(stderr, "Error: Memory allocation failed.\n");
     return;
   }
 
@@ -192,28 +181,25 @@ void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
       struct t_complex amp_10 = vector[i10];
       struct t_complex amp_11 = vector[i11];
 
-      /* Row 0: i00 */
       new_vector[i00] = c_add(
           c_add(c_mul(gate->data[0], amp_00), c_mul(gate->data[1], amp_01)),
           c_add(c_mul(gate->data[2], amp_10), c_mul(gate->data[3], amp_11)));
 
-      /* Row 1: i01 */
       new_vector[i01] = c_add(
           c_add(c_mul(gate->data[4], amp_00), c_mul(gate->data[5], amp_01)),
           c_add(c_mul(gate->data[6], amp_10), c_mul(gate->data[7], amp_11)));
 
-      /* Row 2: i10 */
       new_vector[i10] = c_add(
           c_add(c_mul(gate->data[8], amp_00), c_mul(gate->data[9], amp_01)),
           c_add(c_mul(gate->data[10], amp_10), c_mul(gate->data[11], amp_11)));
 
-      /* Row 3: i11 */
       new_vector[i11] = c_add(
           c_add(c_mul(gate->data[12], amp_00), c_mul(gate->data[13], amp_01)),
           c_add(c_mul(gate->data[14], amp_10), c_mul(gate->data[15], amp_11)));
     }
   }
 
-  free(state->vector);
+  temp = state->vector;
   state->vector = new_vector;
+  state->scratch_vector = temp;
 }
