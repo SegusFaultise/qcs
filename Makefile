@@ -8,7 +8,7 @@ CC = gcc
 C_STANDARD = std=c89
 
 CFLAGS = -Wall -Wextra -pedantic -std=c89 -g -I$(INCLUDE_DIR)
-LDFLAGS = 
+LDFLAGS = -lm
 
 SRCS := $(wildcard $(SRC_DIR)/*.c)
 OBJS = $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))

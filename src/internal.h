@@ -15,7 +15,7 @@ struct t_complex c_zero(void);
 struct t_complex c_one(void);
 struct t_complex c_from_real(double real);
 double c_norm_sq(struct t_complex a);
-double c_magnitude(double real);
+double c_magnitude(struct t_complex a);
 
 /* QUANTUM STATE VECTOR */
 struct t_q_state {
@@ -39,5 +39,16 @@ struct t_q_matrix {
 struct t_q_matrix *q_matrix_init(int rows, int cols);
 void q_matrix_free(struct t_q_matrix *mat);
 void q_gate_apply(struct t_q_state *state, const struct t_q_matrix *gate);
+void q_matrix_print(const struct t_q_matrix *mat);
+
+/* QUANTUM GATES */
+struct t_q_matrix *q_gate_I(void);
+struct t_q_matrix *q_gate_X(void);
+struct t_q_matrix *q_gate_H(void);
+void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
+                     int target_qubit);
+
+/* QUANTUM UTILS */
+void q_state_normalize(struct t_q_state *state);
 
 #endif
