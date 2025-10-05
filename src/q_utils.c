@@ -33,3 +33,13 @@ void q_state_normalize(struct t_q_state *state) {
     state->vector[i].number_imaginary *= inv_norm;
   }
 }
+
+int q_grover_iterations(int num_qubits) {
+  float M_PI = 3.14159265358979323846;
+  double N = (double)(1 << num_qubits);
+  double R;
+
+  R = (M_PI / 4.0) * sqrt(N);
+
+  return (int)floor(R);
+}

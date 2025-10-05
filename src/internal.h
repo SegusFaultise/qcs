@@ -45,10 +45,17 @@ void q_matrix_print(const struct t_q_matrix *mat);
 struct t_q_matrix *q_gate_I(void);
 struct t_q_matrix *q_gate_X(void);
 struct t_q_matrix *q_gate_H(void);
+struct t_q_matrix *q_gate_CNOT(void);
+struct t_q_matrix *q_gate_oracle(int num_qubits, int solution_index);
+struct t_q_matrix *q_gate_U0(int num_qubits);
+void q_apply_phase_flip(struct t_q_state *state, int target_index);
 void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
                      int target_qubit);
+void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
+                     int control_qubit, int target_qubit);
 
 /* QUANTUM UTILS */
 void q_state_normalize(struct t_q_state *state);
+int q_grover_iterations(int num_qubits);
 
 #endif
