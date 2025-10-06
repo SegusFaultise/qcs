@@ -1,11 +1,11 @@
 <div align="center">
 
-  <h1>QCS: Quantum Circuit Simulator</h1>
-
+  <h1>QCS</h1>
+  
   <p>
     <strong>A fast, C89-compliant single-header library for quantum state vector simulation.</strong>
     <br />
-    QCS provides core quantum logic gates and fundamental algorithms (like Grover's Search) ready for high-performance C applications.
+    QCS provides quantum logic gates and fundamental algorithms (like Grover's Search) ready for high-performance C applications.
   </p>
 
   <p>
@@ -51,7 +51,10 @@ You only need a standard C compiler and the ability to link against the math lib
 
 ### 1. Integrate the Single Header File
 
-Download the latest **`qcs.h`** from the [Releases page] and place it in your project directory.
+Download the latest **`qcs.h`** from the releases page and place it in your project directory.
+```bash
+curl -LJO https://github.com/SegusFaultise/qcs/releases/download/v1.0.0/qcs.h
+```
 
 In **exactly one** of your source files (e.g., `main.c`), include the implementation macro before including the header:
 
