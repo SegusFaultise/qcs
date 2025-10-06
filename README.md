@@ -1,108 +1,83 @@
-# Quantum Circuit Simulator
-A high-performance quantum circuit simulator written in C++. This project provides both a single-threaded (classical) and a multi-threaded (parallel) version for simulating quantum circuits, with built-in benchmarking to compare their performance.
+<div align="center">
 
-The simulator is configured via a simple TOML file, allowing users to define the number of qubits and the sequence of quantum gates to apply.
+  <h1>QCS: Quantum Circuit Simulator</h1>
 
-## Features
-* **Three Simulation Modes**:
-    * **Classical**: A single-threaded implementation for correctness and baseline performance.
-    * **Parallel CPU (OpenMP)**: A multi-threaded version for significant speedup on multi-core processors.
-    * **Parallel GPU (CUDA)**: A massively parallel version for extreme-scale simulations on NVIDIA GPUs.
-* **Configurable Circuits**: Define quantum circuits easily using the `quantum_circuit_config.toml` file.
-* **Core Quantum Gates Implemented**:
-    * **H**: Hadamard Gate
-    * **X**: Pauli-X (NOT) Gate
-    * **Y**: Pauli-Y Gate
-    * **CNOT**: Controlled-NOT Gate
-* **High-Level Circuit Recipes**:
-    * **GHZ**: A built-in function to generate a Greenberger–Horne–Zeilinger (GHZ) state.
-* **Built-in Benchmarking**: Accurately measure and compare the execution time of the different versions.
+  <p>
+    <strong>A fast, C89-compliant single-header library for quantum state vector simulation.</strong>
+    <br />
+    QCS provides core quantum logic gates and fundamental algorithms (like Grover's Search) ready for high-performance C applications.
+  </p>
 
-## Prerequisites
+  <p>
+    <a href="https://en.wikipedia.org/wiki/C89_(C_standard)"><img src="https://img.shields.io/badge/C_Standard-C89_|_ANSI_C-blue?style=flat&logo=c&logoColor=white" alt="C Standard"></a>
+    <a href="https://github.com/SegusFaultise/qcs/releases"><img src="https://img.shields.io/github/v/release/SegusFaultise/qcs" alt="Latest Release"></a>
+    <a href="https://github.com/SegusFaultise/qcs/blob/master/LICENSE"><img src="https://img.shields.io/github/license/SegusFaultise/qcs" alt="License"></a>
+    <a href="https://github.com/SegusFaultise/qcs/graphs/contributors"><img src="https://img.shields.io/github/contributors/SegusFaultise/qcs" alt="Contributors"></a>
+  </p>
+</div>
 
-To build and run this project, you will need:
-* A C++17 compliant compiler (e.g., `g++`)
-* `make`
-* OpenMP support in your compiler (for the parallel CPU version)
-* **NVIDIA CUDA Toolkit** (for the parallel GPU version)
+---
 
-## Building the Simulator
+## What is QCS?
 
-The `Makefile` provides several targets to build the different versions of the simulator.
+QCS (Quantum Circuit Simulator) is a lightweight, high-performance library designed for classical simulation of quantum circuits. Unlike larger frameworks, QCS is engineered for maximum portability and minimal dependencies, targeting the **C89 standard** to ensure compatibility with nearly any C compiler and system architecture.
 
-* **Build the CPU versions (default):**
-    ```bash
-    make all
-    ```
+The library uses the **state vector simulation** model, storing the full quantum state in memory as a complex-valued vector. Its primary focus is providing a foundation for small to medium-sized quantum algorithms within existing C codebases.
 
-* **Build only the classical version:**
-    ```bash
-    make classical
-    ```
+### Single-Header Distribution
 
-* **Build only the parallel CPU version:**
-    ```bash
-    make parallel_cpu
-    ```
+The library is distributed as a single file, **`qcs.h`**, making integration into your project as simple as dropping the file into your source tree and adding two lines of code. No complex build systems or installation steps required for users.
 
-* **Build the optional GPU version:**
-    ```bash
-    make parallel_gpu
-    ```
+---
 
-The compiled executables (`quantum_simulator_classical` and `quantum_simulator_parallel`) will be placed in the `build/` directory.
+## Key Features
 
-## Configuration
+* **Single-File Integration**: Delivered entirely in one header file (`qcs.h`) for zero-dependency integration.
+* **C89 / ANSI C Compliant**: Designed for maximum compatibility with legacy systems.
+* **Core Gate Set**: Includes fundamental quantum gates (Hadamard, Pauli-X, CNOT) and complex number operations.
+* **Grover's Search Algorithm**: Built-in support for running Grover's quantum search algorithm efficiently.
+* **State Vector Simulation**: Simulates the full quantum state, allowing for precise probability measurement and state inspection.
 
-The simulation is controlled by the `quantum_circuit_config.toml` file.
+---
 
-* `qubits`: The total number of qubits in the simulation.
-* `[[gates]]`: An array of tables, where each table represents a gate operation to be applied in sequence.
-    * `name`: The name of the gate (e.g., "H", "X", "CNOT", "GHZ").
-    * `targets`: An array of integers specifying the target qubit(s). For CNOT, the convention is `[control_qubit, target_qubit]`.
+## Getting Started
 
-### Example `quantum_circuit_config.toml`
+### Prerequisites
 
-This configuration creates a 3-qubit GHZ state.
+You only need a standard C compiler and the ability to link against the math library (`-lm`).
 
-```toml
-qubits = 24
+* **C Compiler**: GCC, Clang, or any C89-compliant compiler.
+* **Make**: Recommended for building the project source and generating the bundle.
 
-[[gates]]
-name = "H"
-targets = [2]
+### 1. Integrate the Single Header File
 
-[[gates]]
-name = "X"
-targets = [3]
+Download the latest **`qcs.h`** from the [Releases page] and place it in your project directory.
 
-[[gates]]
-name = "Y"
-targets = [1]
+In **exactly one** of your source files (e.g., `main.c`), include the implementation macro before including the header:
 
-[[gates]]
-name = "CNOT"
-targets = [0, 1]
+```c
+/* example main.c */
+#define QCS_IMPLEMENTATION
+#include "qcs_single.h"
 
-[[gates]]
-name = "GHZ"
-targets = []
-```
-## Running the Simulator
+int main() {
+  t_q_circuit *qc = qc_create(3);
 
-The `Makefile` provides several targets to run the different versions of the simulator.
+  qc_h(qc, 0);
+  qc_cnot(qc, 0, 1);
+  qc_x(qc, 2);
 
-* **Run the classicaL CPU version:**
-    ```bash
-    make run_classical
-    ```
+  qc_print_circuit(qc);
+  qc_print_state(qc);
 
-* **Run the parallel CPU version:**
-    ```bash
-    make run_parallel_cpu
-    ```
+  t_q_circuit *grover_circuit = qc_create(3);
+  qc_grover_search(grover_circuit, 5, 10);
+  qc_print_circuit(grover_circuit);
+  qc_print_state(grover_circuit);
 
-* **Run the parallel GPU version:**
-    ```bash
-    make run_parallel_gpu
+  qc_destroy(qc);
+  qc_destroy(grover_circuit);
+
+  return 0;
+}
     ```
