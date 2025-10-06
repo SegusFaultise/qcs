@@ -54,11 +54,13 @@ struct t_complex c_one(void) {
 }
 
 struct t_complex c_from_real(double real) {
-  struct t_complex result = {real, 0.0};
+  struct t_complex result;
+
+  result.number_real = real;
+  result.number_imaginary = 0.0;
 
   return result;
 }
-
 double c_norm_sq(struct t_complex a) {
 
   return (a.number_real * a.number_real) +

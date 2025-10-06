@@ -1,4 +1,3 @@
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -7,8 +6,6 @@
 struct t_q_state *q_state_init(int num_qubits) {
   struct t_q_state *state;
   long size;
-  int ret;
-  long i;
 
   if (num_qubits <= 0) {
     fprintf(stderr, "Error: Number of qubits must be positive.\n");
@@ -22,35 +19,17 @@ struct t_q_state *q_state_init(int num_qubits) {
     return NULL;
   }
 
-  ret = posix_memalign((void **)&state->vector, 64,
-                       size * sizeof(struct t_complex));
-
-  if (ret != 0) {
-    fprintf(stderr,
-            "Error: posix_memalign failed for state vector (Code %d).\n", ret);
-
+  state->vector = (struct t_complex *)calloc(size, sizeof(struct t_complex));
+  if (state->vector == NULL) {
+    /* Cleanup main struct on failure */
     free(state);
     return NULL;
   }
 
-  if (ret != 0) {
-    fprintf(stderr,
-            "Error: posix_memalign failed for state vector (Code %d).\n", ret);
-    free(state);
-    return NULL;
-  }
-
-  for (i = 0; i < size; i++) {
-    state->vector[i] = c_zero();
-  }
-
-  ret = posix_memalign((void **)&state->scratch_vector, 64,
-                       size * sizeof(struct t_complex));
-  if (ret != 0) {
-    fprintf(stderr,
-            "Error: posix_memalign failed for scratch vector (Code %d).\n",
-            ret);
-
+  state->scratch_vector =
+      (struct t_complex *)calloc(size, sizeof(struct t_complex));
+  if (state->scratch_vector == NULL) {
+    fprintf(stderr, "Error: Could not allocate scratch vector.\n");
     free(state->vector);
     free(state);
     return NULL;
@@ -75,7 +54,7 @@ void q_state_free(struct t_q_state *state) {
 }
 
 void q_state_set_basis(struct t_q_state *state, int index_basis) {
-  int i;
+  long i;
 
   if (state == NULL || index_basis < 0 || index_basis >= state->size) {
     fprintf(stderr, "Error: Invalid state or basis index\n");
@@ -89,19 +68,35 @@ void q_state_set_basis(struct t_q_state *state, int index_basis) {
   state->vector[index_basis] = c_one();
 }
 
-void q_state_print(const struct t_q_state *state) {
-  int i;
+void q_state_print(const struct t_q_state *state, int solution_index) {
+  long i;
   int max_print = state->size > 8 ? 4 : state->size;
+  int show_solution = 0;
 
   printf("--- Quantum State (%d Qubits) ---\n", state->qubits_num);
 
   for (i = 0; i < max_print; i++) {
-    printf("|%d>: %f + i%f\n", i, state->vector[i].number_real,
-           state->vector[i].number_imaginary);
+    if (i == solution_index)
+      show_solution = 1;
+  }
+
+  for (i = 0; i < max_print; i++) {
+    printf("|%ld>: %f + i%f%s\n", i, state->vector[i].number_real,
+           state->vector[i].number_imaginary,
+           i == solution_index ? " <-- SOLUTION" : "");
+  }
+
+  if (!show_solution && solution_index >= 0 && solution_index < state->size) {
+    printf("...\n");
+    printf("|%d>: %f + i%f <-- SOLUTION\n", solution_index,
+           state->vector[solution_index].number_real,
+           state->vector[solution_index].number_imaginary);
+    printf("...\n");
+  } else if (state->size > 8) {
+    printf("...\n");
   }
 
   if (state->size > 8) {
-    printf("...\n");
     printf("|%ld>: %f + i%f\n", state->size - 1,
            state->vector[state->size - 1].number_real,
            state->vector[state->size - 1].number_imaginary);

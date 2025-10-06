@@ -4,7 +4,7 @@
 
 #include "internal.h"
 
-struct t_q_matrix *q_gate_i(void) {
+struct t_q_matrix *q_gate_I(void) {
   struct t_q_matrix *i = q_matrix_init(2, 2);
 
   if (!i) {
@@ -57,8 +57,8 @@ struct t_q_matrix *q_gate_CNOT(void) {
   CNOT->data[0] = c_one();
   CNOT->data[5] = c_one();
 
-  CNOT->data[11] = c_one();
-  CNOT->data[14] = c_one();
+  CNOT->data[10] = c_one();
+  CNOT->data[15] = c_one();
 
   return CNOT;
 }
@@ -66,7 +66,7 @@ struct t_q_matrix *q_gate_CNOT(void) {
 struct t_q_matrix *q_gate_oracle(int num_qubits, int solution_index) {
   int size = 1 << num_qubits;
   struct t_q_matrix *oracle;
-  int i;
+  long i;
 
   if (solution_index < 0 || solution_index >= size) {
     fprintf(stderr, "Error: Invalid Oracle solution index.\n");
@@ -90,7 +90,7 @@ struct t_q_matrix *q_gate_U0(int num_qubits) {
   return q_gate_oracle(num_qubits, 0);
 }
 
-void q_apply_phase_flip(struct t_q_state *state, int target_index) {
+void old_q_apply_phase_flip(struct t_q_state *state, int target_index) {
   if (target_index >= 0 && target_index < state->size) {
     state->vector[target_index].number_real *= -1.0;
     state->vector[target_index].number_imaginary *= -1.0;
@@ -99,46 +99,98 @@ void q_apply_phase_flip(struct t_q_state *state, int target_index) {
   }
 }
 
-void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
-                     int target_qubit) {
-  struct t_complex *vector = state->vector;
-  struct t_complex *new_vector =
-      state->scratch_vector; /* 👈 Use scratch buffer */
-  struct t_complex *temp;
-  int k;
-  int i;
+struct t_q_matrix *q_gate_diffusion(int num_qubits) {
+  int size = 1 << num_qubits;
+  struct t_q_matrix *diffusion;
+  long i, j;
+  double factor = 2.0 / size;
 
-  if (gate->rows != 2 || gate->cols != 2) {
-    fprintf(stderr, "Error: Gate must be 2x2 for q_apply_1q_gate.\n");
-    return;
-  }
-  if (target_qubit < 0 || target_qubit >= state->qubits_num) {
-    fprintf(stderr, "Error: Invalid target qubit index.\n");
-    return;
-  }
+  diffusion = q_matrix_init(size, size);
+  if (!diffusion)
+    return NULL;
 
-  k = 1 << target_qubit;
-
-  /* NOTE: The index calculation is simplified in the modern implementation.
-     We will keep your original structure but ensure the core logic is sound. */
-
-  for (i = 0; i < state->size; i++) {
-    if ((i & k) == 0) {
-      int i0 = i;
-      int i1 = i | k;
-
-      struct t_complex amp0 = vector[i0];
-      struct t_complex amp1 = vector[i1];
-
-      new_vector[i0] =
-          c_add(c_mul(gate->data[0], amp0), c_mul(gate->data[1], amp1));
-
-      new_vector[i1] =
-          c_add(c_mul(gate->data[2], amp0), c_mul(gate->data[3], amp1));
+  for (i = 0; i < size; i++) {
+    for (j = 0; j < size; j++) {
+      if (i == j) {
+        diffusion->data[i * size + j] = c_from_real(factor - 1.0);
+      } else {
+        diffusion->data[i * size + j] = c_from_real(factor);
+      }
     }
   }
 
-  temp = state->vector;
+  return diffusion;
+}
+
+void q_apply_diffusion(struct t_q_state *state) {
+  struct t_complex *vector = state->vector;
+  struct t_complex *scratch = state->scratch_vector;
+  long size = state->size;
+  long i;
+
+  struct t_complex mean = c_zero();
+  for (i = 0; i < size; i++) {
+    mean = c_add(mean, vector[i]);
+  }
+  mean.number_real /= size;
+  mean.number_imaginary /= size;
+
+  for (i = 0; i < size; i++) {
+    struct t_complex two_mean;
+    two_mean.number_real = 2.0 * mean.number_real;
+    two_mean.number_imaginary = 2.0 * mean.number_imaginary;
+
+    scratch[i].number_real = two_mean.number_real - vector[i].number_real;
+    scratch[i].number_imaginary =
+        two_mean.number_imaginary - vector[i].number_imaginary;
+  }
+
+  struct t_complex *temp = state->vector;
+  state->vector = scratch;
+  state->scratch_vector = temp;
+}
+
+void q_apply_phase_flip(struct t_q_state *state, int index) {
+  if (state == NULL || index < 0 || index >= state->size) {
+    fprintf(stderr, "Error: Invalid state or index for phase flip.\n");
+    return;
+  }
+
+  state->vector[index] = c_mul(state->vector[index], c_from_real(-1.0));
+}
+
+void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
+                     int target_qubit) {
+  struct t_complex *vector = state->vector;
+  struct t_complex *new_vector = state->scratch_vector;
+  long i;
+  long size = state->size;
+  long step = 1L << target_qubit;
+  long block_size = 1L << (target_qubit + 1);
+
+  if (state == NULL || gate == NULL || target_qubit < 0 ||
+      target_qubit >= state->qubits_num) {
+    fprintf(stderr, "Error: Invalid arguments for 1-qubit gate application.\n");
+    return;
+  }
+
+  for (i = 0; i < size; i += block_size) {
+    long j;
+    for (j = i; j < i + step; j++) {
+      long index0 = j;
+      long index1 = j + step;
+
+      struct t_complex v0 = vector[index0];
+      struct t_complex v1 = vector[index1];
+
+      new_vector[index0] =
+          c_add(c_mul(gate->data[0], v0), c_mul(gate->data[1], v1));
+      new_vector[index1] =
+          c_add(c_mul(gate->data[2], v0), c_mul(gate->data[3], v1));
+    }
+  }
+
+  struct t_complex *temp = state->vector;
   state->vector = new_vector;
   state->scratch_vector = temp;
 }
@@ -146,20 +198,14 @@ void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
 void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
                      int control_qubit, int target_qubit) {
   struct t_complex *vector = state->vector;
-  struct t_complex *new_vector =
-      state->scratch_vector; /* 👈 Use scratch buffer */
-  struct t_complex *temp;
-  int size = state->size;
+  struct t_complex *new_vector = state->scratch_vector;
 
-  int c_bit = 1 << control_qubit;
-  int t_bit = 1 << target_qubit;
-  int i;
+  long i;
+  long size = state->size;
+  long c_bit = 1L << control_qubit;
+  long t_bit = 1L << target_qubit;
 
-  if (gate->rows != 4 || gate->cols != 4) {
-    fprintf(stderr, "Error: Gate must be 4x4 for q_apply_2q_gate.\n");
-    return;
-  }
-  if (control_qubit == target_qubit || control_qubit < 0 || target_qubit < 0 ||
+  if (state == NULL || gate == NULL || control_qubit < 0 || target_qubit < 0 ||
       control_qubit >= state->qubits_num || target_qubit >= state->qubits_num) {
     fprintf(stderr, "Error: Invalid control/target qubit indices.\n");
     return;
@@ -171,10 +217,10 @@ void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
 
   for (i = 0; i < size; i++) {
     if ((i & c_bit) == 0 && (i & t_bit) == 0) {
-      int i00 = i;
-      int i01 = i | t_bit;
-      int i10 = i | c_bit;
-      int i11 = i | t_bit | c_bit;
+      long i00 = i;
+      long i01 = i | t_bit;
+      long i10 = i | c_bit;
+      long i11 = i | t_bit | c_bit;
 
       struct t_complex amp_00 = vector[i00];
       struct t_complex amp_01 = vector[i01];
@@ -199,7 +245,6 @@ void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
     }
   }
 
-  temp = state->vector;
   state->vector = new_vector;
-  state->scratch_vector = temp;
+  state->scratch_vector = vector;
 }

@@ -6,7 +6,7 @@
 void q_state_normalize(struct t_q_state *state) {
   double total_norm_sq = 0.0;
   double inv_norm;
-  int i;
+  long i;
 
   if (state == NULL || state->vector == NULL) {
     fprintf(stderr, "Error: Cannot normalize a NULL state.\n");
@@ -35,11 +35,11 @@ void q_state_normalize(struct t_q_state *state) {
 }
 
 int q_grover_iterations(int num_qubits) {
-  float M_PI = 3.14159265358979323846;
+  double const m_pi = (3.14159265358979323846);
   double N = (double)(1 << num_qubits);
   double R;
 
-  R = (M_PI / 4.0) * sqrt(N);
+  R = (m_pi / 4.0) * sqrt(N);
 
   return (int)floor(R);
 }

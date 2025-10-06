@@ -28,7 +28,7 @@ struct t_q_state {
 struct t_q_state *q_state_init(int qubits_num);
 void q_state_free(struct t_q_state *state);
 void q_state_set_basis(struct t_q_state *state, int index_basis);
-void q_state_print(const struct t_q_state *state);
+void q_state_print(const struct t_q_state *state, int solution_index);
 
 /* QUANTUM MATRIX */
 struct __attribute__((aligned(64))) t_q_matrix {
@@ -49,6 +49,8 @@ struct t_q_matrix *q_gate_H(void);
 struct t_q_matrix *q_gate_CNOT(void);
 struct t_q_matrix *q_gate_oracle(int num_qubits, int solution_index);
 struct t_q_matrix *q_gate_U0(int num_qubits);
+struct t_q_matrix *q_gate_diffusion(int num_qubits);
+void q_apply_diffusion(struct t_q_state *state);
 void q_apply_phase_flip(struct t_q_state *state, int target_index);
 void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
                      int target_qubit);

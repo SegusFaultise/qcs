@@ -1,63 +1,24 @@
-#include <stdio.h>
-#include <stdlib.h>
+#define QCS_IMPLEMENTATION
 
-#include "internal.h"
+#include "../qcs_single.h"
 
 int main() {
-  struct t_q_state *state = NULL;
-  struct t_q_matrix *H = NULL;
+  t_q_circuit *qc = qc_create(3);
 
-  int num_qubits = 15;
-  int solution_index = 6;
-  int num_iterations;
-  int i, q;
+  qc_h(qc, 0);
+  qc_cnot(qc, 0, 1);
+  qc_x(qc, 2);
 
-  printf("--- Grover's Algorithm (N=%d) Test ---\n", num_qubits);
+  qc_print_circuit(qc);
+  qc_print_state(qc);
 
-  num_iterations = q_grover_iterations(num_qubits);
-  printf("Search space size (N): %d. Optimal iterations (R): %d\n",
-         (1 << num_qubits), num_iterations);
+  t_q_circuit *grover_circuit = qc_create(3);
+  qc_grover_search(grover_circuit, 5, 10);
+  qc_print_circuit(grover_circuit);
+  qc_print_state(grover_circuit);
 
-  state = q_state_init(num_qubits);
-  if (state == NULL)
-    return 1;
+  qc_destroy(qc);
+  qc_destroy(grover_circuit);
 
-  q_state_set_basis(state, 0);
-  H = q_gate_H();
-  if (H == NULL) {
-    q_state_free(state);
-    return 1;
-  }
-
-  for (q = 0; q < num_qubits; q++) {
-    q_apply_1q_gate(state, H, q);
-  }
-  printf("\n[Step 1] State after H^n (Uniform Superposition):\n");
-  q_state_normalize(state);
-  q_state_print(state);
-
-  for (i = 0; i < num_iterations; i++) {
-    q_apply_phase_flip(state, solution_index);
-
-    for (q = 0; q < num_qubits; q++) {
-      q_apply_1q_gate(state, H, q);
-    }
-
-    q_apply_phase_flip(state, 0);
-
-    for (q = 0; q < num_qubits; q++) {
-      q_apply_1q_gate(state, H, q);
-    }
-
-    q_state_normalize(state);
-  }
-
-  printf("\n[Step 5] Final State after %d Iterations:\n", num_iterations);
-  q_state_print(state);
-
-  q_matrix_free(H);
-  q_state_free(state);
-
-  printf("\n--- Test Complete ---\n");
   return 0;
 }

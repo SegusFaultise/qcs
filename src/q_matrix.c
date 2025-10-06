@@ -39,19 +39,20 @@ void q_matrix_free(struct t_q_matrix *mat) {
   }
 }
 
-#define BLOCK_SIZE 64
+#define BLOCK_SIZE 50
 
 void q_gate_apply(struct t_q_state *state, const struct t_q_matrix *gate) {
   struct t_complex *new_vector = state->scratch_vector;
   struct t_complex *vector = state->vector;
   struct t_complex *temp;
 
-  int N = state->size;
-  int i, j;
-  int ii, jj;
+  long N = state->size;
+  long i, j;
+  long ii, jj;
+  long N_block = 0;
 
   if (gate->cols != N || gate->rows != N) {
-    fprintf(stderr, "Error: Gate dimensions (%dx%d) mismatch size (%d)\n",
+    fprintf(stderr, "Error: Gate dimensions (%dx%d) mismatch size (%ld)\n",
             gate->rows, gate->cols, N);
     return;
   }
@@ -61,14 +62,14 @@ void q_gate_apply(struct t_q_state *state, const struct t_q_matrix *gate) {
   }
 
   for (ii = 0; ii < N; ii += BLOCK_SIZE) {
+    N_block = ((ii + BLOCK_SIZE) < N) ? BLOCK_SIZE : (N - ii);
     for (jj = 0; jj < N; jj += BLOCK_SIZE) {
-      for (i = ii; i < ii + BLOCK_SIZE && i < N; i++) {
-        for (j = jj; j < jj + BLOCK_SIZE && j < N; j++) {
-          int k_idx = i * gate->cols + j;
-
-          struct t_complex term = c_mul(gate->data[k_idx], vector[j]);
-
-          new_vector[i] = c_add(new_vector[i], term);
+      for (i = ii; i < ii + N_block; i++) {
+        for (j = jj; j < jj + BLOCK_SIZE; j++) {
+          if (j < N) {
+            new_vector[i] =
+                c_add(new_vector[i], c_mul(gate->data[i * N + j], vector[j]));
+          }
         }
       }
     }
