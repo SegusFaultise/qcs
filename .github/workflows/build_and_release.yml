@@ -1,0 +1,60 @@
+name: Build and Release Single Header
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  bundle_and_release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write 
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (GCC, Make)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Run Full Make Build
+        run: make all
+
+      - name: Run make bundle to create qcs.h
+        run: make bundle
+
+      - name: Get tag name
+        id: tag
+        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.tag.outputs.TAG_NAME }}
+          name: Release ${{ steps.tag.outputs.TAG_NAME }}
+          body: |
+            ## Single Header Library Release
+            The single-header version of the QCS library is attached below for easy integration.
+          draft: false
+          prerelease: false
+
+      - name: Upload Single Header File (qcs.h)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./qcs.h
+          asset_name: qcs.h
+          asset_content_type: text/plain
