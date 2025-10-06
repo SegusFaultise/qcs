@@ -84,3 +84,6 @@ int main() {
   return 0;
 }
 ```
+* **[API Reference](API_REFERENCE.md)**: All functions and structs.
+* **[Contribution Guide](CONTRIBUTING.md)**: Information for developers and building the bundle.
+```
