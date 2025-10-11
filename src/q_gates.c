@@ -90,15 +90,6 @@ struct t_q_matrix *q_gate_U0(int num_qubits) {
   return q_gate_oracle(num_qubits, 0);
 }
 
-void old_q_apply_phase_flip(struct t_q_state *state, int target_index) {
-  if (target_index >= 0 && target_index < state->size) {
-    state->vector[target_index].number_real *= -1.0;
-    state->vector[target_index].number_imaginary *= -1.0;
-  } else {
-    fprintf(stderr, "Error: Invalid target index for phase flip.\n");
-  }
-}
-
 struct t_q_matrix *q_gate_diffusion(int num_qubits) {
   int size = 1 << num_qubits;
   struct t_q_matrix *diffusion;
