@@ -47,8 +47,6 @@ struct t_q_matrix *q_gate_I(void);
 struct t_q_matrix *q_gate_X(void);
 struct t_q_matrix *q_gate_H(void);
 struct t_q_matrix *q_gate_CNOT(void);
-struct t_q_matrix *q_gate_U0(int num_qubits);
-struct t_q_matrix *q_gate_diffusion(int num_qubits);
 struct t_q_matrix *q_gate_CP(double angle);
 struct t_q_matrix *q_gate_P(double angle);
 struct t_q_matrix *q_gate_Z(void);
@@ -94,6 +92,8 @@ int thread_pool_add_task(thread_pool_t *pool, void (*function)(void *),
                          void *arg);
 void thread_pool_wait(thread_pool_t *pool);
 int thread_pool_destroy(thread_pool_t *pool);
+void get_thread_work_range(long total_size, int num_threads, int thread_id,
+                           long *start, long *end);
 
 /* PTHREADS THREAD ARGS*/
 #define CACHE_LINE_SIZE 64

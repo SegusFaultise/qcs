@@ -285,12 +285,8 @@ void qc_grover_search(t_q_circuit *circuit, int solution_state) {
   }
 
   for (i = 0; i < iterations; i++) {
-    q_state_print(circuit->state, solution_state);
-
     q_apply_phase_flip(circuit->state, solution_state);
     qc_add_gate(circuit, "ORACLE", solution_state, -1, 0.0);
-
-    q_state_print(circuit->state, solution_state);
 
     q_apply_diffusion(circuit->state);
     qc_add_gate(circuit, "DIFFUSION", -1, -1, 0.0);

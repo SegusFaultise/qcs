@@ -63,6 +63,9 @@ static void diffusion_transform_worker(void *arg) {
 
 void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
                      int target_qubit) {
+  long size, block_size, num_blocks;
+  int i;
+
   if (state == NULL || gate == NULL || target_qubit < 0 ||
       target_qubit >= state->qubits_num) {
     fprintf(stderr, "Error: Invalid arguments for 1-qubit gate application.\n");
@@ -72,53 +75,29 @@ void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
   memcpy(state->scratch_vector, state->vector,
          state->size * sizeof(struct t_complex));
 
-  if (pool != NULL) {
-    long size = state->size;
-    long block_size = 1L << (target_qubit + 1);
-    long num_blocks = size / block_size;
-    int i;
+  size = state->size;
+  block_size = 1L << (target_qubit + 1);
+  num_blocks = size / block_size;
 
-    for (i = 0; i < pool->num_threads; i++) {
-      long blocks_per_thread = num_blocks / pool->num_threads;
-      long start_block = i * blocks_per_thread;
-      long end_block = (i == pool->num_threads - 1)
-                           ? num_blocks
-                           : start_block + blocks_per_thread;
-      struct t_thread_args *args = malloc(sizeof(struct t_thread_args));
-      if (!args)
-        exit(EXIT_FAILURE);
+  for (i = 0; i < pool->num_threads; i++) {
+    long start_block, end_block;
+    get_thread_work_range(num_blocks, pool->num_threads, i, &start_block,
+                          &end_block);
 
-      args->start = start_block * block_size;
-      args->end = end_block * block_size;
-      args->state = state;
-      args->gate = gate;
-      args->target_qubit = target_qubit;
+    struct t_thread_args *args = malloc(sizeof(struct t_thread_args));
+    if (!args)
+      exit(EXIT_FAILURE);
 
-      thread_pool_add_task(pool, q_apply_1q_gate_worker, args);
-    }
-    thread_pool_wait(pool);
+    args->start = start_block * block_size;
+    args->end = end_block * block_size;
+    args->state = state;
+    args->gate = gate;
+    args->target_qubit = target_qubit;
 
-  } else {
-    long i;
-    long size = state->size;
-    long step = 1L << target_qubit;
-    long block_size = 1L << (target_qubit + 1);
-
-    for (i = 0; i < size; i += block_size) {
-      long j;
-      for (j = i; j < i + step; j++) {
-        long index0 = j;
-        long index1 = j + step;
-        struct t_complex v0 = state->vector[index0];
-        struct t_complex v1 = state->vector[index1];
-
-        state->scratch_vector[index0] =
-            c_add(c_mul(gate->data[0], v0), c_mul(gate->data[1], v1));
-        state->scratch_vector[index1] =
-            c_add(c_mul(gate->data[2], v0), c_mul(gate->data[3], v1));
-      }
-    }
+    thread_pool_add_task(pool, q_apply_1q_gate_worker, args);
   }
+  thread_pool_wait(pool);
+
   struct t_complex *temp = state->vector;
   state->vector = state->scratch_vector;
   state->scratch_vector = temp;
@@ -140,76 +119,63 @@ void q_apply_phase_flip(struct t_q_state *state, int index) {
 
 void q_apply_diffusion(struct t_q_state *state) {
   long size = state->size;
+  int i;
+  struct t_thread_args **reduction_args_list;
+  double total_real = 0.0, total_imag = 0.0;
+  struct t_complex mean;
 
-  if (pool != NULL) {
-    int i;
-    struct t_thread_args **reduction_args_list =
-        malloc(pool->num_threads * sizeof(struct t_thread_args *));
-    if (!reduction_args_list)
+  reduction_args_list =
+      malloc(pool->num_threads * sizeof(struct t_thread_args *));
+  if (!reduction_args_list)
+    exit(EXIT_FAILURE);
+
+  /* Calculate mean in parallel */
+  for (i = 0; i < pool->num_threads; i++) {
+    long start, end;
+    get_thread_work_range(size, pool->num_threads, i, &start, &end);
+
+    reduction_args_list[i] = malloc(sizeof(struct t_thread_args));
+    if (!reduction_args_list[i])
       exit(EXIT_FAILURE);
 
-    for (i = 0; i < pool->num_threads; i++) {
-      long chunk_size = size / pool->num_threads;
-      long start = i * chunk_size;
-      long end = (i == pool->num_threads - 1) ? size : start + chunk_size;
-
-      reduction_args_list[i] = malloc(sizeof(struct t_thread_args));
-      if (!reduction_args_list[i])
-        exit(EXIT_FAILURE);
-
-      reduction_args_list[i]->start = start;
-      reduction_args_list[i]->end = end;
-      reduction_args_list[i]->state = state;
-      thread_pool_add_task(pool, diffusion_mean_worker, reduction_args_list[i]);
-    }
-    thread_pool_wait(pool);
-
-    double total_real = 0.0, total_imag = 0.0;
-    for (i = 0; i < pool->num_threads; i++) {
-      total_real +=
-          reduction_args_list[i]->reduction_result.sums.partial_real_sum;
-      total_imag +=
-          reduction_args_list[i]->reduction_result.sums.partial_imag_sum;
-      free(reduction_args_list[i]);
-    }
-    free(reduction_args_list);
-
-    struct t_complex mean = {total_real / size, total_imag / size};
-    for (i = 0; i < pool->num_threads; i++) {
-      long chunk_size = size / pool->num_threads;
-      long start = i * chunk_size;
-      long end = (i == pool->num_threads - 1) ? size : start + chunk_size;
-      struct t_thread_args *transform_args =
-          malloc(sizeof(struct t_thread_args));
-      if (!transform_args)
-        exit(EXIT_FAILURE);
-
-      transform_args->start = start;
-      transform_args->end = end;
-      transform_args->state = state;
-      transform_args->mean = mean;
-      thread_pool_add_task(pool, diffusion_transform_worker, transform_args);
-    }
-    thread_pool_wait(pool);
-
-  } else {
-    struct t_complex mean = c_zero();
-    long i;
-    for (i = 0; i < size; i++) {
-      mean = c_add(mean, state->vector[i]);
-    }
-    mean.number_real /= size;
-    mean.number_imaginary /= size;
-    struct t_complex two_mean = {2.0 * mean.number_real,
-                                 2.0 * mean.number_imaginary};
-    for (i = 0; i < size; i++) {
-      state->scratch_vector[i].number_real =
-          two_mean.number_real - state->vector[i].number_real;
-      state->scratch_vector[i].number_imaginary =
-          two_mean.number_imaginary - state->vector[i].number_imaginary;
-    }
+    reduction_args_list[i]->start = start;
+    reduction_args_list[i]->end = end;
+    reduction_args_list[i]->state = state;
+    thread_pool_add_task(pool, diffusion_mean_worker, reduction_args_list[i]);
   }
+  thread_pool_wait(pool);
 
+  /* Aggregate results */
+  for (i = 0; i < pool->num_threads; i++) {
+    total_real +=
+        reduction_args_list[i]->reduction_result.sums.partial_real_sum;
+    total_imag +=
+        reduction_args_list[i]->reduction_result.sums.partial_imag_sum;
+    free(reduction_args_list[i]);
+  }
+  free(reduction_args_list);
+
+  mean.number_real = total_real / size;
+  mean.number_imaginary = total_imag / size;
+
+  /* Apply transformation in parallel */
+  for (i = 0; i < pool->num_threads; i++) {
+    long start, end;
+    get_thread_work_range(size, pool->num_threads, i, &start, &end);
+
+    struct t_thread_args *transform_args = malloc(sizeof(struct t_thread_args));
+    if (!transform_args)
+      exit(EXIT_FAILURE);
+
+    transform_args->start = start;
+    transform_args->end = end;
+    transform_args->state = state;
+    transform_args->mean = mean;
+    thread_pool_add_task(pool, diffusion_transform_worker, transform_args);
+  }
+  thread_pool_wait(pool);
+
+  /* Commit the new state */
   struct t_complex *temp = state->vector;
   state->vector = state->scratch_vector;
   state->scratch_vector = temp;
@@ -243,6 +209,9 @@ static void q_apply_2q_gate_worker(void *arg) {
 
 void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
                      int control_qubit, int target_qubit) {
+  long size;
+  int i;
+
   if (state == NULL || gate == NULL || control_qubit < 0 || target_qubit < 0 ||
       control_qubit >= state->qubits_num || target_qubit >= state->qubits_num ||
       control_qubit == target_qubit) {
@@ -253,48 +222,24 @@ void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
   memcpy(state->scratch_vector, state->vector,
          state->size * sizeof(struct t_complex));
 
-  if (pool != NULL) {
-    int i;
-    long size = state->size;
-    for (i = 0; i < pool->num_threads; i++) {
-      long chunk_size = size / pool->num_threads;
-      long start = i * chunk_size;
-      long end = (i == pool->num_threads - 1) ? size : start + chunk_size;
+  size = state->size;
+  for (i = 0; i < pool->num_threads; i++) {
+    long start, end;
+    get_thread_work_range(size, pool->num_threads, i, &start, &end);
 
-      struct t_thread_args *args = malloc(sizeof(struct t_thread_args));
-      if (!args)
-        exit(EXIT_FAILURE);
+    struct t_thread_args *args = malloc(sizeof(struct t_thread_args));
+    if (!args)
+      exit(EXIT_FAILURE);
 
-      args->start = start;
-      args->end = end;
-      args->state = state;
-      args->gate = gate;
-      args->control_qubit = control_qubit;
-      args->target_qubit = target_qubit;
-      thread_pool_add_task(pool, q_apply_2q_gate_worker, args);
-    }
-    thread_pool_wait(pool);
-
-  } else {
-    long i;
-    long size = state->size;
-    long c_bit = 1L << control_qubit;
-    long t_bit = 1L << target_qubit;
-
-    for (i = 0; i < size; i++) {
-      if ((i & c_bit) != 0 && (i & t_bit) == 0) {
-        long index0 = i;
-        long index1 = i | t_bit;
-        struct t_complex v0 = state->vector[index0];
-        struct t_complex v1 = state->vector[index1];
-
-        state->scratch_vector[index0] =
-            c_add(c_mul(gate->data[0], v0), c_mul(gate->data[1], v1));
-        state->scratch_vector[index1] =
-            c_add(c_mul(gate->data[2], v0), c_mul(gate->data[3], v1));
-      }
-    }
+    args->start = start;
+    args->end = end;
+    args->state = state;
+    args->gate = gate;
+    args->control_qubit = control_qubit;
+    args->target_qubit = target_qubit;
+    thread_pool_add_task(pool, q_apply_2q_gate_worker, args);
   }
+  thread_pool_wait(pool);
 
   struct t_complex *temp = state->vector;
   state->vector = state->scratch_vector;
@@ -330,19 +275,6 @@ struct t_q_matrix *q_gate_H(void) {
   H->data[2] = factor;
   H->data[3] = c_from_real(-root2_inv);
   return H;
-}
-
-struct t_q_matrix *q_gate_CNOT(void) {
-  struct t_q_matrix *CNOT = q_matrix_init(4, 4);
-  if (!CNOT)
-    return NULL;
-  CNOT->data[0] = c_one();
-  CNOT->data[5] = c_one();
-  CNOT->data[10] = c_zero();
-  CNOT->data[11] = c_one();
-  CNOT->data[14] = c_one();
-  CNOT->data[15] = c_zero();
-  return CNOT;
 }
 
 struct t_q_matrix *q_gate_CP(double angle) {

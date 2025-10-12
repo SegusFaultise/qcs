@@ -28,36 +28,24 @@ static void normalize_divide_worker(void *arg) {
 }
 
 void q_state_normalize(struct t_q_state *state) {
+  int i;
+  long size;
+  struct t_thread_args **reduction_args_list;
+  double total_norm_sq = 0.0;
+
   if (state == NULL || state->vector == NULL)
     return;
 
-  if (pool == NULL) {
-    double total_norm_sq = 0.0;
-    long i;
-    for (i = 0; i < state->size; i++) {
-      total_norm_sq += c_norm_sq(state->vector[i]);
-    }
-    if (total_norm_sq > 1e-12 && total_norm_sq != 1.0) {
-      double inv_norm = 1.0 / sqrt(total_norm_sq);
-      for (i = 0; i < state->size; i++) {
-        state->vector[i].number_real *= inv_norm;
-        state->vector[i].number_imaginary *= inv_norm;
-      }
-    }
-    return;
-  }
-
-  int i;
-  long size = state->size;
-  struct t_thread_args **reduction_args_list =
+  size = state->size;
+  reduction_args_list =
       malloc(pool->num_threads * sizeof(struct t_thread_args *));
   if (!reduction_args_list)
     exit(EXIT_FAILURE);
 
+  /* Calculate sum of squares in parallel */
   for (i = 0; i < pool->num_threads; i++) {
-    long chunk_size = size / pool->num_threads;
-    long start = i * chunk_size;
-    long end = (i == pool->num_threads - 1) ? size : start + chunk_size;
+    long start, end;
+    get_thread_work_range(size, pool->num_threads, i, &start, &end);
 
     reduction_args_list[i] = malloc(sizeof(struct t_thread_args));
     if (!reduction_args_list[i])
@@ -71,7 +59,7 @@ void q_state_normalize(struct t_q_state *state) {
   }
   thread_pool_wait(pool);
 
-  double total_norm_sq = 0.0;
+  /* Aggregate results */
   for (i = 0; i < pool->num_threads; i++) {
     total_norm_sq +=
         reduction_args_list[i]->reduction_result.sums.partial_real_sum;
@@ -79,12 +67,13 @@ void q_state_normalize(struct t_q_state *state) {
   }
   free(reduction_args_list);
 
+  /* Apply normalization factor in parallel */
   if (total_norm_sq > 1e-12 && total_norm_sq != 1.0) {
     double inv_norm = 1.0 / sqrt(total_norm_sq);
     for (i = 0; i < pool->num_threads; i++) {
-      long chunk_size = size / pool->num_threads;
-      long start = i * chunk_size;
-      long end = (i == pool->num_threads - 1) ? size : start + chunk_size;
+      long start, end;
+      get_thread_work_range(size, pool->num_threads, i, &start, &end);
+
       struct t_thread_args *div_args = malloc(sizeof(struct t_thread_args));
       if (div_args == NULL) {
         exit(EXIT_FAILURE);
@@ -92,7 +81,8 @@ void q_state_normalize(struct t_q_state *state) {
       div_args->start = start;
       div_args->end = end;
       div_args->state = state;
-      div_args->mean.number_real = inv_norm;
+      div_args->mean.number_real =
+          inv_norm; /* Re-using mean field for the scalar */
       thread_pool_add_task(pool, normalize_divide_worker, div_args);
     }
     thread_pool_wait(pool);

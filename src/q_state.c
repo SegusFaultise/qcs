@@ -58,9 +58,9 @@ struct t_q_state *q_state_init(int num_qubits) {
   state->size = size;
 
   for (i = 0; i < pool->num_threads; i++) {
-    long chunk_size = size / pool->num_threads;
-    long start = i * chunk_size;
-    long end = (i == pool->num_threads - 1) ? size : start + chunk_size;
+    long start, end;
+
+    get_thread_work_range(size, pool->num_threads, i, &start, &end);
 
     struct t_thread_args *args = malloc(sizeof(struct t_thread_args));
     if (args == NULL) {

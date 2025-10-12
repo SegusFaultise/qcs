@@ -6,6 +6,13 @@
 
 static void *worker_thread_function(void *pool_ptr);
 
+void get_thread_work_range(long total_size, int num_threads, int thread_id,
+                           long *start, long *end) {
+  long chunk_size = total_size / num_threads;
+  *start = thread_id * chunk_size;
+  *end = (thread_id == num_threads - 1) ? total_size : (*start) + chunk_size;
+}
+
 thread_pool_t *thread_pool_create(int num_threads, int queue_size) {
   thread_pool_t *pool;
   int i;
