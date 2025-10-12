@@ -315,3 +315,48 @@ struct t_q_matrix *q_gate_P(double angle) {
   P->data[3].number_imaginary = sin(angle);
   return P;
 }
+
+struct t_q_matrix *q_gate_RX(double angle) {
+  struct t_q_matrix *RX = q_matrix_init(2, 2);
+  double cos_half = cos(angle / 2.0);
+  double sin_half = sin(angle / 2.0);
+  if (!RX)
+    return NULL;
+
+  RX->data[0].number_real = cos_half;
+  RX->data[1].number_imaginary = -sin_half;
+  RX->data[2].number_imaginary = -sin_half;
+  RX->data[3].number_real = cos_half;
+
+  return RX;
+}
+
+struct t_q_matrix *q_gate_RY(double angle) {
+  struct t_q_matrix *RY = q_matrix_init(2, 2);
+  double cos_half = cos(angle / 2.0);
+  double sin_half = sin(angle / 2.0);
+  if (!RY)
+    return NULL;
+
+  RY->data[0].number_real = cos_half;
+  RY->data[1].number_real = -sin_half;
+  RY->data[2].number_real = sin_half;
+  RY->data[3].number_real = cos_half;
+
+  return RY;
+}
+
+struct t_q_matrix *q_gate_RZ(double angle) {
+  struct t_q_matrix *RZ = q_matrix_init(2, 2);
+  double cos_half = cos(angle / 2.0);
+  double sin_half = sin(angle / 2.0);
+  if (!RZ)
+    return NULL;
+
+  RZ->data[0].number_real = cos_half;
+  RZ->data[0].number_imaginary = -sin_half;
+  RZ->data[3].number_real = cos_half;
+  RZ->data[3].number_imaginary = sin_half;
+
+  return RZ;
+}

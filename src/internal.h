@@ -51,6 +51,9 @@ struct t_q_matrix *q_gate_CP(double angle);
 struct t_q_matrix *q_gate_P(double angle);
 struct t_q_matrix *q_gate_Z(void);
 struct t_q_matrix *q_gate_Y(void);
+struct t_q_matrix *q_gate_RX(double angle);
+struct t_q_matrix *q_gate_RY(double angle);
+struct t_q_matrix *q_gate_RZ(double angle);
 
 void q_apply_diffusion(struct t_q_state *state);
 void q_apply_phase_flip(struct t_q_state *state, int target_index);

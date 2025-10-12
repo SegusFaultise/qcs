@@ -140,6 +140,27 @@ void qc_cnot(t_q_circuit *circuit, int control, int target) {
   qc_add_gate(circuit, "CNOT", target, control, 0.0);
 }
 
+void qc_rx(t_q_circuit *circuit, int qubit, double angle) {
+  struct t_q_matrix *RX = q_gate_RX(angle);
+  q_apply_1q_gate(circuit->state, RX, qubit);
+  q_matrix_free(RX);
+  qc_add_gate(circuit, "RX", qubit, -1, angle);
+}
+
+void qc_ry(t_q_circuit *circuit, int qubit, double angle) {
+  struct t_q_matrix *RY = q_gate_RY(angle);
+  q_apply_1q_gate(circuit->state, RY, qubit);
+  q_matrix_free(RY);
+  qc_add_gate(circuit, "RY", qubit, -1, angle);
+}
+
+void qc_rz(t_q_circuit *circuit, int qubit, double angle) {
+  struct t_q_matrix *RZ = q_gate_RZ(angle);
+  q_apply_1q_gate(circuit->state, RZ, qubit);
+  q_matrix_free(RZ);
+  qc_add_gate(circuit, "RZ", qubit, -1, angle);
+}
+
 int qc_measure(t_q_circuit *circuit, int qubit) {
   if (circuit == NULL || circuit->state == NULL || qubit < 0 ||
       qubit >= circuit->num_qubits) {
