@@ -250,13 +250,11 @@ double qc_get_probability(t_q_circuit *circuit, int state) {
   return c_norm_sq(circuit->state->vector[state]);
 }
 
-void qc_grover_search(t_q_circuit *circuit, int solution_state,
-                      int iterations) {
+void qc_grover_search(t_q_circuit *circuit, int solution_state) {
   int q;
   int i;
-
-  printf("Running Grover's Search for |%d⟩ (%d iterations)\n", solution_state,
-         iterations);
+  int num_qubits = circuit->num_qubits;
+  int iterations = q_grover_iterations(num_qubits);
 
   for (q = 0; q < circuit->num_qubits; q++) {
     qc_h(circuit, q);

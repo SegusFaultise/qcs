@@ -39,7 +39,7 @@ void qc_print_state(t_q_circuit *circuit);
 void qc_print_circuit(t_q_circuit *circuit);
 
 /* Built-in Algorithms */
-void qc_grover_search(t_q_circuit *circuit, int solution_state, int iterations);
+void qc_grover_search(t_q_circuit *circuit, int solution_state);
 void qc_quantum_fourier_transform(t_q_circuit *circuit);
 void qc_bernstein_vazirani(t_q_circuit *circuit, int hidden_string);
 
