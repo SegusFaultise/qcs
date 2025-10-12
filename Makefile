@@ -2,7 +2,9 @@ TARGET = qcs
 SRC_DIR = src
 INCLUDE_DIR = include
 BUILD_DIR = build
-LOG_FILE = $(BUILD_DIR)/$(TARGET).build_log
+PROFILE_DIR = profile
+LOG_DIR = log
+LOG_FILE = $(LOG_DIR)/$(TARGET).build_log
 
 CC = gcc
 
@@ -28,6 +30,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | newdir
 
 newdir:
 	@mkdir -p $(BUILD_DIR)
+	@mkdir -p $(LOG_DIR)
 	@touch $(LOG_FILE)
 
 run: all
@@ -35,38 +38,22 @@ run: all
 	@$(BUILD_DIR)/$(TARGET) $(ARGS)
 
 profile: all
-	@echo "--- Starting Profiling and Resource Monitoring ---"
-
-	@echo "\n[1/4] Running for time-series CPU/RAM monitoring..."
-	@if command -v pidstat > /dev/null; then \
-		echo "      -> Found pidstat. Logging usage every second."; \
-		( $(BUILD_DIR)/$(TARGET) & PID=$$!; pidstat -p $$PID -r -u 1 > $(BUILD_DIR)/resource_timeseries.log & wait $$PID ); \
-		echo "      -> Time-series log saved to $(BUILD_DIR)/resource_timeseries.log"; \
-	else \
-		echo "      -> 'pidstat' not found. Running program without time-series log."; \
-		echo "      -> To install (Arch): sudo pacman -S sysstat"; \
-		@$(BUILD_DIR)/$(TARGET); \
-	fi
-
-	@echo "\n[2/4] Generating gprof reports from run data..."
-	@gprof $(BUILD_DIR)/$(TARGET) gmon.out > $(BUILD_DIR)/profile.txt
-	@gprof $(BUILD_DIR)/$(TARGET) gmon.out | gprof2dot | dot -Tpng -o $(BUILD_DIR)/callgraph.png
-	@echo "      -> gprof report and call graph saved in $(BUILD_DIR)/"
-
-	@echo "\n[3/4] Re-running to generate resource usage summary..."
-	@( /usr/bin/time -v $(BUILD_DIR)/$(TARGET) ) >/dev/null 2> $(BUILD_DIR)/resource_summary.txt
-	@echo "      -> Summary (max RAM, CPU %) saved to $(BUILD_DIR)/resource_summary.txt"
-
-	@echo "\n[4/4] Profiling complete."
-	@echo "--- Finished ---"
+	@echo "$$(date +'%Y-%m-%d_%H:%M:%S') | [ PROFILING: Creating profile dir ]" | tee -a $(LOG_FILE)
+	@mkdir -p $(PROFILE_DIR)
+	@echo "$$(date +'%Y-%m-%d_%H:%M:%S') | [ PROFILING: Running profile.py to benchmark and create profiling reports ]" | tee -a $(LOG_FILE)
+	@python scripts/profile.py
+	@python scripts/plot_all_cpu.py
+	@echo "$$(date +'%Y-%m-%d_%H:%M:%S') | [ PROFILING: benchmarking and reports generated successfully ]" | tee -a $(LOG_FILE)
 
 clean:
 	@echo "$$(date +'%Y-%m-%d_%H:%M:%S') | [ Cleaning up... ]" | tee -a $(LOG_FILE)
 	@$(RM) -r $(BUILD_DIR)
+	@$(RM) -r $(PROFILE_DIR)
+	@$(RM) -r $(LOG_DIR)
 	@$(RM) -f gmon.out callgraph.dot
 	@$(RM) -f qcs.h test_bundle test_bundle.c
 
 bundle:
 	@echo "$$(date +'%Y-%m-%d_%H:%M:%S') | [ BUNDLE: Running bundle.py to create qcs.h ]" | tee -a $(LOG_FILE)
-	@python bundle.py
+	@python scripts/bundle.py
 	@echo "$$(date +'%Y-%m-%d_%H:%M:%S') | [ BUNDLE: qcs.h created successfully ]" | tee -a $(LOG_FILE)

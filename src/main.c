@@ -14,18 +14,9 @@ int main(int argc, char *argv[]) {
 
   if (argc != 2) {
     fprintf(stderr, "Usage: %s <num_qubits>\n", argv[0]);
-    fprintf(stderr,
-            "INFO: A good value for benchmarking is between 22 and 26.\n");
     return 1;
   }
   num_qubits = atoi(argv[1]);
-
-  if (num_qubits < 16 || num_qubits > 30) {
-    fprintf(stderr,
-            "Warning: num_qubits is outside the recommended range (16-30).\n"
-            "         Small values are too fast; large values consume too much "
-            "memory.\n");
-  }
 
   printf("Setting up Grover's search for %d qubits...\n", num_qubits);
   grover_circuit = qc_create(num_qubits);
