@@ -39,7 +39,7 @@ void q_matrix_free(struct t_q_matrix *mat) {
   }
 }
 
-#define BLOCK_SIZE 50
+#define BLOCK_SIZE 64
 
 void q_gate_apply(struct t_q_state *state, const struct t_q_matrix *gate) {
   struct t_complex *new_vector = state->scratch_vector;

@@ -47,9 +47,13 @@ struct t_q_matrix *q_gate_I(void);
 struct t_q_matrix *q_gate_X(void);
 struct t_q_matrix *q_gate_H(void);
 struct t_q_matrix *q_gate_CNOT(void);
-struct t_q_matrix *q_gate_oracle(int num_qubits, int solution_index);
 struct t_q_matrix *q_gate_U0(int num_qubits);
 struct t_q_matrix *q_gate_diffusion(int num_qubits);
+struct t_q_matrix *q_gate_CP(double angle);
+struct t_q_matrix *q_gate_P(double angle);
+struct t_q_matrix *q_gate_Z(void);
+struct t_q_matrix *q_gate_Y(void);
+
 void q_apply_diffusion(struct t_q_state *state);
 void q_apply_phase_flip(struct t_q_state *state, int target_index);
 void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
@@ -60,5 +64,59 @@ void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
 /* QUANTUM UTILS */
 void q_state_normalize(struct t_q_state *state);
 int q_grover_iterations(int num_qubits);
+
+/* PTHREADS THREAD POOL*/
+#include <pthread.h>
+
+struct t_task {
+  void (*function)(void *arg);
+  void *argument;
+};
+
+typedef struct {
+  pthread_t *threads;
+  struct t_task *task_queue;
+  int num_threads;
+  int queue_size;
+  int head;
+  int tail;
+  int task_count;
+  int active_tasks;
+  int shutdown;
+
+  pthread_mutex_t lock;
+  pthread_cond_t notify;
+  pthread_cond_t all_tasks_done;
+} thread_pool_t;
+
+thread_pool_t *thread_pool_create(int num_threads, int queue_size);
+int thread_pool_add_task(thread_pool_t *pool, void (*function)(void *),
+                         void *arg);
+void thread_pool_wait(thread_pool_t *pool);
+int thread_pool_destroy(thread_pool_t *pool);
+
+/* PTHREADS THREAD ARGS*/
+#define CACHE_LINE_SIZE 64
+
+struct t_thread_args {
+  long start;
+  long end;
+
+  int target_qubit;
+  int control_qubit;
+
+  struct t_complex mean;
+  struct t_q_state *state;
+  const struct t_q_matrix *gate;
+
+  union {
+    struct {
+      double partial_real_sum;
+      double partial_imag_sum;
+    } sums;
+    char pad[CACHE_LINE_SIZE];
+  } reduction_result;
+
+} __attribute__((aligned(CACHE_LINE_SIZE)));
 
 #endif

@@ -34,8 +34,9 @@ void qc_run(t_q_circuit *circuit);
 void qc_run_shots(t_q_circuit *circuit, int shots, int *results);
 
 /* State Access */
+int qc_find_most_likely_state(t_q_circuit *circuit);
 double qc_get_probability(t_q_circuit *circuit, int state);
-void qc_print_state(t_q_circuit *circuit);
+void qc_print_state(t_q_circuit *circuit, int solution_index);
 void qc_print_circuit(t_q_circuit *circuit);
 
 /* Built-in Algorithms */

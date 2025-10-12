@@ -8,8 +8,8 @@ LOG_FILE = $(LOG_DIR)/$(TARGET).build_log
 
 CC = gcc
 
-CFLAGS =-std=c89 -pg -g -Wall -Wextra -pedantic -I$(INCLUDE_DIR)
-LDFLAGS = -lm
+CFLAGS =-std=c89 -o3 -march=native -pg -g -Wall -Wextra -pedantic -I$(INCLUDE_DIR)
+LDFLAGS = -lm -pthread
 
 SRCS := $(wildcard $(SRC_DIR)/*.c)
 OBJS = $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
