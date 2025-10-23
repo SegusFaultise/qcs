@@ -71,7 +71,8 @@ int thread_pool_add_task(thread_pool_t *pool, void (*function)(void *),
   pool->task_count++;
   pool->active_tasks++;
 
-  pthread_cond_signal(&(pool->notify));
+  /* Use broadcast instead of signal for better performance with multiple threads */
+  pthread_cond_broadcast(&(pool->notify));
   pthread_mutex_unlock(&(pool->lock));
 
   return 0;

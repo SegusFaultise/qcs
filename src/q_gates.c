@@ -5,66 +5,28 @@
 
 #include "internal.h"
 
-extern thread_pool_t *pool;
+/* Forward declarations for worker functions */
+#ifdef QCS_MULTI_THREAD
+static void q_apply_1q_gate_worker(void *arg);
+static void q_apply_2q_gate_worker(void *arg);
+#endif
 
-static void q_apply_1q_gate_worker(void *arg) {
-  struct t_thread_args *args = (struct t_thread_args *)arg;
-  struct t_q_state *state = args->state;
-  const struct t_q_matrix *gate = args->gate;
-  int target_qubit = args->target_qubit;
-  long step = 1L << target_qubit;
-  long block_size = 1L << (target_qubit + 1);
-  long i;
+/* Forward declarations for GPU functions */
+#ifdef QCS_GPU_OPENCL
+void q_apply_1q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate, int target_qubit);
+void q_apply_2q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate, 
+                         int control_qubit, int target_qubit);
+#endif
 
-  for (i = args->start; i < args->end; i += block_size) {
-    long j;
-    for (j = i; j < i + step; j++) {
-      long index0 = j;
-      long index1 = j + step;
-      struct t_complex v0 = state->vector[index0];
-      struct t_complex v1 = state->vector[index1];
-
-      state->scratch_vector[index0] =
-          c_add(c_mul(gate->data[0], v0), c_mul(gate->data[1], v1));
-      state->scratch_vector[index1] =
-          c_add(c_mul(gate->data[2], v0), c_mul(gate->data[3], v1));
-    }
-  }
-  free(args);
-}
-
-static void diffusion_mean_worker(void *arg) {
-  struct t_thread_args *args = (struct t_thread_args *)arg;
-  args->reduction_result.sums.partial_real_sum = 0.0;
-  args->reduction_result.sums.partial_imag_sum = 0.0;
-  long i;
-  for (i = args->start; i < args->end; i++) {
-    args->reduction_result.sums.partial_real_sum +=
-        args->state->vector[i].number_real;
-    args->reduction_result.sums.partial_imag_sum +=
-        args->state->vector[i].number_imaginary;
-  }
-}
-
-static void diffusion_transform_worker(void *arg) {
-  struct t_thread_args *args = (struct t_thread_args *)arg;
-  struct t_complex mean = args->mean;
-  struct t_complex two_mean = {2.0 * mean.number_real,
-                               2.0 * mean.number_imaginary};
-  long i;
-  for (i = args->start; i < args->end; i++) {
-    args->state->scratch_vector[i].number_real =
-        two_mean.number_real - args->state->vector[i].number_real;
-    args->state->scratch_vector[i].number_imaginary =
-        two_mean.number_imaginary - args->state->vector[i].number_imaginary;
-  }
-  free(args);
-}
+/* Base sequential implementation - no parallelization overhead */
+/* This is the default implementation when no parallelization is requested */
 
 void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
                      int target_qubit) {
-  long size, block_size, num_blocks;
-  int i;
+  long size = state->size;
+  long step = 1L << target_qubit;
+  long block_size = 1L << (target_qubit + 1);
+  long i, j;
 
   if (state == NULL || gate == NULL || target_qubit < 0 ||
       target_qubit >= state->qubits_num) {
@@ -72,32 +34,278 @@ void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
     return;
   }
 
-  memcpy(state->scratch_vector, state->vector,
-         state->size * sizeof(struct t_complex));
+  /* Choose implementation based on preprocessor definitions */
+  #ifdef QCS_GPU_OPENCL
+    /* GPU-accelerated implementation */
+    q_apply_1q_gate_gpu(state, gate, target_qubit);
+  #elif defined(QCS_CPU_OPENMP)
+    /* OpenMP parallel implementation */
+    c_copy_simd(state->scratch_vector, state->vector, size);
+    
+    #ifdef _OPENMP
+    #pragma omp parallel for
+    for (i = 0; i < size; i += block_size) {
+        for (j = i; j < i + step; j++) {
+            long index0 = j;
+            long index1 = j + step;
+            struct t_complex v0 = state->vector[index0];
+            struct t_complex v1 = state->vector[index1];
 
-  size = state->size;
-  block_size = 1L << (target_qubit + 1);
-  num_blocks = size / block_size;
+            state->scratch_vector[index0] = c_add(c_mul(gate->data[0], v0), c_mul(gate->data[1], v1));
+            state->scratch_vector[index1] = c_add(c_mul(gate->data[2], v0), c_mul(gate->data[3], v1));
+        }
+    }
+    #else
+    /* Fallback to sequential if OpenMP not available */
+    for (i = 0; i < size; i += block_size) {
+        for (j = i; j < i + step; j++) {
+            long index0 = j;
+            long index1 = j + step;
+            struct t_complex v0 = state->vector[index0];
+            struct t_complex v1 = state->vector[index1];
 
-  for (i = 0; i < pool->num_threads; i++) {
-    long start_block, end_block;
-    get_thread_work_range(num_blocks, pool->num_threads, i, &start_block,
-                          &end_block);
+            state->scratch_vector[index0] = c_add(c_mul(gate->data[0], v0), c_mul(gate->data[1], v1));
+            state->scratch_vector[index1] = c_add(c_mul(gate->data[2], v0), c_mul(gate->data[3], v1));
+        }
+    }
+    #endif
+    
+  #elif defined(QCS_GPU_OPENCL)
+    /* GPU OpenCL implementation */
+    c_copy_gpu_real(state->scratch_vector, state->vector, size);
+    
+    for (i = 0; i < size; i += block_size) {
+        for (j = i; j < i + step; j++) {
+            long index0 = j;
+            long index1 = j + step;
+            struct t_complex v0 = state->vector[index0];
+            struct t_complex v1 = state->vector[index1];
 
-    struct t_thread_args *args = malloc(sizeof(struct t_thread_args));
-    if (!args)
-      exit(EXIT_FAILURE);
+            state->scratch_vector[index0] = c_add(c_mul(gate->data[0], v0), c_mul(gate->data[1], v1));
+            state->scratch_vector[index1] = c_add(c_mul(gate->data[2], v0), c_mul(gate->data[3], v1));
+        }
+    }
+    
+  #elif defined(QCS_SIMD_ONLY)
+    /* SIMD-only implementation */
+    c_copy_simd(state->scratch_vector, state->vector, size);
+    
+    for (i = 0; i < size; i += block_size) {
+        for (j = i; j < i + step; j++) {
+            long index0 = j;
+            long index1 = j + step;
+            struct t_complex v0 = state->vector[index0];
+            struct t_complex v1 = state->vector[index1];
 
-    args->start = start_block * block_size;
-    args->end = end_block * block_size;
-    args->state = state;
-    args->gate = gate;
-    args->target_qubit = target_qubit;
+            state->scratch_vector[index0] = c_add(c_mul(gate->data[0], v0), c_mul(gate->data[1], v1));
+            state->scratch_vector[index1] = c_add(c_mul(gate->data[2], v0), c_mul(gate->data[3], v1));
+        }
+    }
+    
+  #elif defined(QCS_MULTI_THREAD)
+    /* Multi-thread implementation using pthread */
+    extern thread_pool_t *pool;
+    
+    /* Copy state vector to scratch vector */
+    memcpy(state->scratch_vector, state->vector, size * sizeof(struct t_complex));
 
-    thread_pool_add_task(pool, q_apply_1q_gate_worker, args);
+    /* Use thread pool for parallel execution */
+    int effective_threads = (pool->num_threads > 4) ? 4 : pool->num_threads;
+    long num_blocks = size / block_size;
+    long blocks_per_thread = (num_blocks + effective_threads - 1) / effective_threads;
+    int k;
+
+    for (k = 0; k < effective_threads; k++) {
+        long start_block = k * blocks_per_thread;
+        long end_block = (k + 1) * blocks_per_thread;
+        if (end_block > num_blocks) end_block = num_blocks;
+        
+        if (start_block >= end_block) break;
+
+        struct t_thread_args *args = malloc(sizeof(struct t_thread_args));
+        if (!args) exit(EXIT_FAILURE);
+
+        args->start = start_block * block_size;
+        args->end = end_block * block_size;
+        args->state = state;
+        args->gate = gate;
+        args->target_qubit = target_qubit;
+
+        thread_pool_add_task(pool, q_apply_1q_gate_worker, args);
+    }
+    thread_pool_wait(pool);
+    
+  #else
+    /* Default: Pure sequential implementation (no parallelization overhead) */
+    memcpy(state->scratch_vector, state->vector, size * sizeof(struct t_complex));
+
+    for (i = 0; i < size; i += block_size) {
+        for (j = i; j < i + step; j++) {
+            long index0 = j;
+            long index1 = j + step;
+            struct t_complex v0 = state->vector[index0];
+            struct t_complex v1 = state->vector[index1];
+
+            state->scratch_vector[index0] = c_add(c_mul(gate->data[0], v0), c_mul(gate->data[1], v1));
+            state->scratch_vector[index1] = c_add(c_mul(gate->data[2], v0), c_mul(gate->data[3], v1));
+        }
+    }
+  #endif
+
+  /* Swap vectors */
+  struct t_complex *temp = state->vector;
+  state->vector = state->scratch_vector;
+  state->scratch_vector = temp;
+}
+
+void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
+                     int control_qubit, int target_qubit) {
+  long size = state->size;
+  long c_bit = 1L << control_qubit;
+  long t_bit = 1L << target_qubit;
+  long i;
+
+  if (state == NULL || gate == NULL || control_qubit < 0 || target_qubit < 0 ||
+      control_qubit >= state->qubits_num || target_qubit >= state->qubits_num ||
+      control_qubit == target_qubit) {
+    fprintf(stderr, "Error: Invalid arguments for 2-qubit gate application.\n");
+    return;
   }
-  thread_pool_wait(pool);
 
+  /* Choose implementation based on preprocessor definitions */
+  #ifdef QCS_GPU_OPENCL
+    /* GPU-accelerated implementation */
+    q_apply_2q_gate_gpu(state, gate, control_qubit, target_qubit);
+  #elif defined(QCS_CPU_OPENMP)
+    /* OpenMP parallel implementation */
+    c_copy_simd(state->scratch_vector, state->vector, size);
+    
+    #ifdef _OPENMP
+    #pragma omp parallel for
+    for (i = 0; i < size; i++) {
+        if ((i & c_bit) != 0 && (i & t_bit) == 0) {
+            long index0 = i;
+            long index1 = i | t_bit;
+
+            struct t_complex v0 = state->vector[index0];
+            struct t_complex v1 = state->vector[index1];
+
+            state->scratch_vector[index0] = c_add(c_mul(gate->data[0], v0), c_mul(gate->data[1], v1));
+            state->scratch_vector[index1] = c_add(c_mul(gate->data[2], v0), c_mul(gate->data[3], v1));
+        } else {
+            state->scratch_vector[i] = state->vector[i];
+        }
+    }
+    #else
+    /* Fallback to sequential if OpenMP not available */
+    for (i = 0; i < size; i++) {
+        if ((i & c_bit) != 0 && (i & t_bit) == 0) {
+            long index0 = i;
+            long index1 = i | t_bit;
+
+            struct t_complex v0 = state->vector[index0];
+            struct t_complex v1 = state->vector[index1];
+
+            state->scratch_vector[index0] = c_add(c_mul(gate->data[0], v0), c_mul(gate->data[1], v1));
+            state->scratch_vector[index1] = c_add(c_mul(gate->data[2], v0), c_mul(gate->data[3], v1));
+        } else {
+            state->scratch_vector[i] = state->vector[i];
+        }
+    }
+    #endif
+    
+  #elif defined(QCS_GPU_OPENCL)
+    /* GPU OpenCL implementation */
+    c_copy_gpu_real(state->scratch_vector, state->vector, size);
+    
+    for (i = 0; i < size; i++) {
+        if ((i & c_bit) != 0 && (i & t_bit) == 0) {
+            long index0 = i;
+            long index1 = i | t_bit;
+
+            struct t_complex v0 = state->vector[index0];
+            struct t_complex v1 = state->vector[index1];
+
+            state->scratch_vector[index0] = c_add(c_mul(gate->data[0], v0), c_mul(gate->data[1], v1));
+            state->scratch_vector[index1] = c_add(c_mul(gate->data[2], v0), c_mul(gate->data[3], v1));
+        } else {
+            state->scratch_vector[i] = state->vector[i];
+        }
+    }
+    
+  #elif defined(QCS_SIMD_ONLY)
+    /* SIMD-only implementation */
+    c_copy_simd(state->scratch_vector, state->vector, size);
+    
+    for (i = 0; i < size; i++) {
+        if ((i & c_bit) != 0 && (i & t_bit) == 0) {
+            long index0 = i;
+            long index1 = i | t_bit;
+
+            struct t_complex v0 = state->vector[index0];
+            struct t_complex v1 = state->vector[index1];
+
+            state->scratch_vector[index0] = c_add(c_mul(gate->data[0], v0), c_mul(gate->data[1], v1));
+            state->scratch_vector[index1] = c_add(c_mul(gate->data[2], v0), c_mul(gate->data[3], v1));
+        } else {
+            state->scratch_vector[i] = state->vector[i];
+        }
+    }
+    
+  #elif defined(QCS_MULTI_THREAD)
+    /* Multi-thread implementation using pthread */
+    extern thread_pool_t *pool;
+    
+    /* Copy state vector to scratch vector */
+    memcpy(state->scratch_vector, state->vector, size * sizeof(struct t_complex));
+
+    /* Use thread pool for parallel execution */
+    int effective_threads = (pool->num_threads > 4) ? 4 : pool->num_threads;
+    long work_per_thread = (size + effective_threads - 1) / effective_threads;
+    int k;
+
+    for (k = 0; k < effective_threads; k++) {
+        long start = k * work_per_thread;
+        long end = (k + 1) * work_per_thread;
+        if (end > size) end = size;
+        
+        if (start >= end) break;
+
+        struct t_thread_args *args = malloc(sizeof(struct t_thread_args));
+        if (!args) exit(EXIT_FAILURE);
+
+        args->start = start;
+        args->end = end;
+        args->state = state;
+        args->gate = gate;
+        args->control_qubit = control_qubit;
+        args->target_qubit = target_qubit;
+
+        thread_pool_add_task(pool, q_apply_2q_gate_worker, args);
+    }
+    thread_pool_wait(pool);
+    
+  #else
+    /* Default: Pure sequential implementation (no parallelization overhead) */
+    memcpy(state->scratch_vector, state->vector, size * sizeof(struct t_complex));
+
+    for (i = 0; i < size; i++) {
+        if ((i & c_bit) != 0 && (i & t_bit) == 0) {
+            long index0 = i;
+            long index1 = i | t_bit;
+
+            struct t_complex v0 = state->vector[index0];
+            struct t_complex v1 = state->vector[index1];
+
+            state->scratch_vector[index0] = c_add(c_mul(gate->data[0], v0), c_mul(gate->data[1], v1));
+            state->scratch_vector[index1] = c_add(c_mul(gate->data[2], v0), c_mul(gate->data[3], v1));
+        } else {
+            state->scratch_vector[i] = state->vector[i];
+        }
+    }
+  #endif
+
+  /* Swap vectors */
   struct t_complex *temp = state->vector;
   state->vector = state->scratch_vector;
   state->scratch_vector = temp;
@@ -108,144 +316,53 @@ void q_apply_phase_flip(struct t_q_state *state, int index) {
     fprintf(stderr, "Error: Invalid state or index for phase flip.\n");
     return;
   }
-  memcpy(state->scratch_vector, state->vector,
-         state->size * sizeof(struct t_complex));
-  state->scratch_vector[index] =
-      c_mul(state->scratch_vector[index], c_from_real(-1.0));
+
   struct t_complex *temp = state->vector;
   state->vector = state->scratch_vector;
   state->scratch_vector = temp;
+
+  state->vector[index].number_real = -state->scratch_vector[index].number_real;
+  state->vector[index].number_imaginary = -state->scratch_vector[index].number_imaginary;
 }
 
 void q_apply_diffusion(struct t_q_state *state) {
-  long size = state->size;
-  int i;
-  struct t_thread_args **reduction_args_list;
-  double total_real = 0.0, total_imag = 0.0;
-  struct t_complex mean;
-
-  reduction_args_list =
-      malloc(pool->num_threads * sizeof(struct t_thread_args *));
-  if (!reduction_args_list)
-    exit(EXIT_FAILURE);
-
-  /* Calculate mean in parallel */
-  for (i = 0; i < pool->num_threads; i++) {
-    long start, end;
-    get_thread_work_range(size, pool->num_threads, i, &start, &end);
-
-    reduction_args_list[i] = malloc(sizeof(struct t_thread_args));
-    if (!reduction_args_list[i])
-      exit(EXIT_FAILURE);
-
-    reduction_args_list[i]->start = start;
-    reduction_args_list[i]->end = end;
-    reduction_args_list[i]->state = state;
-    thread_pool_add_task(pool, diffusion_mean_worker, reduction_args_list[i]);
-  }
-  thread_pool_wait(pool);
-
-  /* Aggregate results */
-  for (i = 0; i < pool->num_threads; i++) {
-    total_real +=
-        reduction_args_list[i]->reduction_result.sums.partial_real_sum;
-    total_imag +=
-        reduction_args_list[i]->reduction_result.sums.partial_imag_sum;
-    free(reduction_args_list[i]);
-  }
-  free(reduction_args_list);
-
-  mean.number_real = total_real / size;
-  mean.number_imaginary = total_imag / size;
-
-  /* Apply transformation in parallel */
-  for (i = 0; i < pool->num_threads; i++) {
-    long start, end;
-    get_thread_work_range(size, pool->num_threads, i, &start, &end);
-
-    struct t_thread_args *transform_args = malloc(sizeof(struct t_thread_args));
-    if (!transform_args)
-      exit(EXIT_FAILURE);
-
-    transform_args->start = start;
-    transform_args->end = end;
-    transform_args->state = state;
-    transform_args->mean = mean;
-    thread_pool_add_task(pool, diffusion_transform_worker, transform_args);
-  }
-  thread_pool_wait(pool);
-
-  /* Commit the new state */
-  struct t_complex *temp = state->vector;
-  state->vector = state->scratch_vector;
-  state->scratch_vector = temp;
-}
-
-static void q_apply_2q_gate_worker(void *arg) {
-  struct t_thread_args *args = (struct t_thread_args *)arg;
-  struct t_q_state *state = args->state;
-  const struct t_q_matrix *gate = args->gate;
-  long i;
-
-  long c_bit = 1L << args->control_qubit;
-  long t_bit = 1L << args->target_qubit;
-
-  for (i = args->start; i < args->end; i++) {
-    if ((i & c_bit) != 0 && (i & t_bit) == 0) {
-      long index0 = i;
-      long index1 = i | t_bit;
-
-      struct t_complex v0 = state->vector[index0];
-      struct t_complex v1 = state->vector[index1];
-
-      state->scratch_vector[index0] =
-          c_add(c_mul(gate->data[0], v0), c_mul(gate->data[1], v1));
-      state->scratch_vector[index1] =
-          c_add(c_mul(gate->data[2], v0), c_mul(gate->data[3], v1));
-    }
-  }
-  free(args);
-}
-
-void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
-                     int control_qubit, int target_qubit) {
-  long size;
-  int i;
-
-  if (state == NULL || gate == NULL || control_qubit < 0 || target_qubit < 0 ||
-      control_qubit >= state->qubits_num || target_qubit >= state->qubits_num ||
-      control_qubit == target_qubit) {
-    fprintf(stderr, "Error: Invalid arguments for 2-qubit gate application.\n");
+  if (state == NULL) {
+    fprintf(stderr, "Error: Invalid state for diffusion.\n");
     return;
   }
 
-  memcpy(state->scratch_vector, state->vector,
-         state->size * sizeof(struct t_complex));
+  long size = state->size;
+  long i;
+  struct t_complex mean = c_zero();
+  double mean_magnitude;
 
-  size = state->size;
-  for (i = 0; i < pool->num_threads; i++) {
-    long start, end;
-    get_thread_work_range(size, pool->num_threads, i, &start, &end);
-
-    struct t_thread_args *args = malloc(sizeof(struct t_thread_args));
-    if (!args)
-      exit(EXIT_FAILURE);
-
-    args->start = start;
-    args->end = end;
-    args->state = state;
-    args->gate = gate;
-    args->control_qubit = control_qubit;
-    args->target_qubit = target_qubit;
-    thread_pool_add_task(pool, q_apply_2q_gate_worker, args);
+  /* Calculate mean amplitude */
+  for (i = 0; i < size; i++) {
+    mean = c_add(mean, state->vector[i]);
   }
-  thread_pool_wait(pool);
+  mean_magnitude = c_magnitude(mean);
 
+  if (mean_magnitude > 1e-10) {
+    mean.number_real /= mean_magnitude;
+    mean.number_imaginary /= mean_magnitude;
+  }
+
+  /* Apply diffusion transformation */
+  struct t_complex two_mean = {2.0 * mean.number_real, 2.0 * mean.number_imaginary};
+  
   struct t_complex *temp = state->vector;
   state->vector = state->scratch_vector;
   state->scratch_vector = temp;
+
+  for (i = 0; i < size; i++) {
+    state->vector[i].number_real = 
+        two_mean.number_real - state->scratch_vector[i].number_real;
+    state->vector[i].number_imaginary = 
+        two_mean.number_imaginary - state->scratch_vector[i].number_imaginary;
+  }
 }
 
+/* Gate matrix definitions */
 struct t_q_matrix *q_gate_I(void) {
   struct t_q_matrix *i = q_matrix_init(2, 2);
   if (!i)
@@ -360,3 +477,60 @@ struct t_q_matrix *q_gate_RZ(double angle) {
 
   return RZ;
 }
+
+/* Worker functions for multi-threaded implementation */
+#ifdef QCS_MULTI_THREAD
+static void q_apply_1q_gate_worker(void *arg) {
+  struct t_thread_args *args = (struct t_thread_args *)arg;
+  struct t_q_state *state = args->state;
+  const struct t_q_matrix *gate = args->gate;
+  int target_qubit = args->target_qubit;
+  long start = args->start;
+  long end = args->end;
+  long step = 1L << target_qubit;
+  long block_size = 1L << (target_qubit + 1);
+  long i, j;
+
+  for (i = start; i < end; i += block_size) {
+    for (j = i; j < i + step && j < end; j++) {
+      long index0 = j;
+      long index1 = j + step;
+      struct t_complex v0 = state->vector[index0];
+      struct t_complex v1 = state->vector[index1];
+
+      state->scratch_vector[index0] = c_add(c_mul(gate->data[0], v0), c_mul(gate->data[1], v1));
+      state->scratch_vector[index1] = c_add(c_mul(gate->data[2], v0), c_mul(gate->data[3], v1));
+    }
+  }
+  free(args);
+}
+
+static void q_apply_2q_gate_worker(void *arg) {
+  struct t_thread_args *args = (struct t_thread_args *)arg;
+  struct t_q_state *state = args->state;
+  const struct t_q_matrix *gate = args->gate;
+  int control_qubit = args->control_qubit;
+  int target_qubit = args->target_qubit;
+  long start = args->start;
+  long end = args->end;
+  long c_bit = 1L << control_qubit;
+  long t_bit = 1L << target_qubit;
+  long i;
+
+  for (i = start; i < end; i++) {
+    if ((i & c_bit) != 0 && (i & t_bit) == 0) {
+      long index0 = i;
+      long index1 = i | t_bit;
+
+      struct t_complex v0 = state->vector[index0];
+      struct t_complex v1 = state->vector[index1];
+
+      state->scratch_vector[index0] = c_add(c_mul(gate->data[0], v0), c_mul(gate->data[1], v1));
+      state->scratch_vector[index1] = c_add(c_mul(gate->data[2], v0), c_mul(gate->data[3], v1));
+    } else {
+      state->scratch_vector[i] = state->vector[i];
+    }
+  }
+  free(args);
+}
+#endif

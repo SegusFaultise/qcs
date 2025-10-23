@@ -1,7 +1,30 @@
 #ifndef QCS_H
 #define QCS_H
 
-/* Quantum Circuit Builder */
+/* ======================================================================== */
+/* QCS PARALLELIZATION MODE SELECTION */
+/* ======================================================================== */
+/* 
+ * QCS is sequential by default for maximum compatibility and simplicity.
+ * 
+ * To enable parallelization, define one of the following BEFORE including qcs.h:
+ * 
+ * #define QCS_MULTI_THREAD    - Use pthread threads for parallelization
+ * #define QCS_CPU_OPENMP      - Use OpenMP parallel loops
+ * #define QCS_GPU_OPENCL      - Use OpenCL GPU acceleration
+ * #define QCS_SIMD_ONLY       - Use SIMD vectorization only
+ * 
+ * Example usage:
+ * #define QCS_GPU_OPENCL
+ * #include "qcs.h"
+ * 
+ * If no parallelization mode is defined, QCS runs in pure sequential mode
+ * with no parallelization overhead.
+ */
+
+/* ======================================================================== */
+/* QUANTUM CIRCUIT BUILDER */
+/* ======================================================================== */
 typedef struct t_q_circuit t_q_circuit;
 
 /* Circuit Creation */
@@ -43,6 +66,7 @@ void qc_print_circuit(t_q_circuit *circuit);
 void qc_grover_search(t_q_circuit *circuit, int solution_state);
 void qc_quantum_fourier_transform(t_q_circuit *circuit);
 void qc_bernstein_vazirani(t_q_circuit *circuit, int hidden_string);
+void qc_ghz_state(t_q_circuit *circuit);
 
 /* Utility Functions */
 int qc_get_num_qubits(t_q_circuit *circuit);

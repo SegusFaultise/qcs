@@ -6,7 +6,9 @@
 #include "../include/qcs.h"
 #include "internal.h"
 
+#ifdef QCS_MULTI_THREAD
 thread_pool_t *pool = NULL;
+#endif
 
 struct t_q_circuit {
   int num_qubits;
@@ -21,19 +23,23 @@ struct t_q_circuit {
 };
 
 t_q_circuit *qc_create(int num_qubits) {
+  #ifdef QCS_MULTI_THREAD
   if (pool == NULL) {
     long num_cores = sysconf(_SC_NPROCESSORS_ONLN);
 
     if (num_cores < 1)
       num_cores = 2;
 
-    pool = thread_pool_create(num_cores, 128);
+    /* Limit thread pool size to reduce overhead - use fewer threads for better performance */
+    int effective_threads = (num_cores > 4) ? 4 : num_cores;
+    pool = thread_pool_create(effective_threads, 16);
 
     if (pool == NULL) {
       fprintf(stderr, "Error: Could not create thread pool.\n");
       return NULL;
     }
   }
+  #endif
 
   t_q_circuit *circuit = (t_q_circuit *)malloc(sizeof(t_q_circuit));
   if (!circuit)
@@ -58,10 +64,12 @@ t_q_circuit *qc_create(int num_qubits) {
 }
 
 void qc_destroy(t_q_circuit *circuit) {
+  #ifdef QCS_MULTI_THREAD
   if (pool != NULL) {
     thread_pool_destroy(pool);
     pool = NULL;
   }
+  #endif
 
   int i;
 
@@ -84,12 +92,16 @@ void qc_destroy(t_q_circuit *circuit) {
   }
 }
 
+
 static char *qc_strdup(const char *str) {
+  size_t len;
+  char *copy;
+  
   if (str == NULL)
     return NULL;
 
-  size_t len = strlen(str) + 1;
-  char *copy = (char *)malloc(len);
+  len = strlen(str) + 1;
+  copy = (char *)malloc(len);
   if (copy) {
     memcpy(copy, str, len);
   }
@@ -162,24 +174,30 @@ void qc_rz(t_q_circuit *circuit, int qubit, double angle) {
 }
 
 int qc_measure(t_q_circuit *circuit, int qubit) {
+  long state_size;
+  double prob_0;
+  long i;
+  double amp_real;
+  double amp_imag;
+  double random_val;
+
   if (circuit == NULL || circuit->state == NULL || qubit < 0 ||
       qubit >= circuit->num_qubits) {
     return 0;
   }
 
-  long state_size = circuit->state->size;
-  double prob_0 = 0.0;
-  long i;
+  state_size = circuit->state->size;
+  prob_0 = 0.0;
 
   for (i = 0; i < state_size; i++) {
     if ((i & (1L << qubit)) == 0) {
-      double amp_real = circuit->state->vector[i].number_real;
-      double amp_imag = circuit->state->vector[i].number_imaginary;
+      amp_real = circuit->state->vector[i].number_real;
+      amp_imag = circuit->state->vector[i].number_imaginary;
       prob_0 += (amp_real * amp_real) + (amp_imag * amp_imag);
     }
   }
 
-  double random_val = rand() / (double)RAND_MAX;
+  random_val = rand() / (double)RAND_MAX;
 
   if (random_val <= prob_0) {
     for (i = 0; i < state_size; i++) {
@@ -221,13 +239,14 @@ void qc_measure_all(t_q_circuit *circuit, int *results) {
 void qc_print_circuit(t_q_circuit *circuit) {
   int q;
   int g;
+  int has_measurement;
 
   printf("\n╔══════════════════════════════════════════╗\n");
   printf("║              QUANTUM CIRCUIT             ║\n");
   printf("╚══════════════════════════════════════════╝\n");
   printf("Qubits: %d | Gates: %d\n\n", circuit->num_qubits, circuit->num_gates);
 
-  int has_measurement = 0;
+  has_measurement = 0;
 
   for (g = 0; g < circuit->history_size; g++) {
     if (strcmp(circuit->gate_history[g], "MEASURE") == 0) {
@@ -416,12 +435,14 @@ void qc_run(t_q_circuit *circuit) {
 void qc_run_shots(t_q_circuit *circuit, int shots, int *results) {
   long i;
   int s;
+  long num_states;
+  double *probabilities;
 
   if (!circuit || shots <= 0 || !results)
     return;
 
-  long num_states = circuit->state->size;
-  double *probabilities = malloc(num_states * sizeof(double));
+  num_states = circuit->state->size;
+  probabilities = malloc(num_states * sizeof(double));
   if (!probabilities)
     return;
 
@@ -478,30 +499,39 @@ void qc_bernstein_vazirani(t_q_circuit *circuit, int hidden_string) {
 }
 
 void qc_optimize(t_q_circuit *circuit) {
-  int i = 0;
+  int i;
+  char *gate1_name;
+  int target1;
+  int control1;
+  char *gate2_name;
+  int target2;
+  int control2;
+  int single_qubit_cancel;
+  int cnot_cancel;
+  int j;
+
+  i = 0;
   while (i < circuit->history_size - 1) {
-    char *gate1_name = circuit->gate_history[i];
-    int target1 = circuit->target_qubits[i];
-    int control1 = circuit->control_qubits[i];
+    gate1_name = circuit->gate_history[i];
+    target1 = circuit->target_qubits[i];
+    control1 = circuit->control_qubits[i];
 
-    char *gate2_name = circuit->gate_history[i + 1];
-    int target2 = circuit->target_qubits[i + 1];
-    int control2 = circuit->control_qubits[i + 1];
+    gate2_name = circuit->gate_history[i + 1];
+    target2 = circuit->target_qubits[i + 1];
+    control2 = circuit->control_qubits[i + 1];
 
-    int single_qubit_cancel =
+    single_qubit_cancel =
         (target1 == target2) && (strcmp(gate1_name, gate2_name) == 0) &&
         (strcmp(gate1_name, "H") == 0 || strcmp(gate1_name, "X") == 0 ||
          strcmp(gate1_name, "Y") == 0 || strcmp(gate1_name, "Z") == 0);
 
-    int cnot_cancel = (strcmp(gate1_name, "CNOT") == 0) &&
-                      (strcmp(gate2_name, "CNOT") == 0) &&
-                      (target1 == target2) && (control1 == control2);
+    cnot_cancel = (strcmp(gate1_name, "CNOT") == 0) &&
+                  (strcmp(gate2_name, "CNOT") == 0) &&
+                  (target1 == target2) && (control1 == control2);
 
     if (single_qubit_cancel || cnot_cancel) {
       free(circuit->gate_history[i]);
       free(circuit->gate_history[i + 1]);
-
-      int j;
       for (j = i; j < circuit->history_size - 2; j++) {
         circuit->gate_history[j] = circuit->gate_history[j + 2];
         circuit->target_qubits[j] = circuit->target_qubits[j + 2];

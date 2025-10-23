@@ -4,7 +4,9 @@
 
 #include "internal.h"
 
+#ifdef QCS_MULTI_THREAD
 extern thread_pool_t *pool;
+#endif
 
 static void normalize_sum_worker(void *arg) {
   struct t_thread_args *args = (struct t_thread_args *)arg;
@@ -28,13 +30,14 @@ static void normalize_divide_worker(void *arg) {
 }
 
 void q_state_normalize(struct t_q_state *state) {
+  if (state == NULL || state->vector == NULL)
+    return;
+
+#ifdef QCS_MULTI_THREAD
   int i;
   long size;
   struct t_thread_args **reduction_args_list;
   double total_norm_sq = 0.0;
-
-  if (state == NULL || state->vector == NULL)
-    return;
 
   size = state->size;
   reduction_args_list =
@@ -87,6 +90,26 @@ void q_state_normalize(struct t_q_state *state) {
     }
     thread_pool_wait(pool);
   }
+#else
+  /* Sequential normalization */
+  long i;
+  long size = state->size;
+  double total_norm_sq = 0.0;
+
+  /* Calculate sum of squares */
+  for (i = 0; i < size; i++) {
+    total_norm_sq += c_norm_sq(state->vector[i]);
+  }
+
+  /* Apply normalization factor */
+  if (total_norm_sq > 1e-12 && total_norm_sq != 1.0) {
+    double inv_norm = 1.0 / sqrt(total_norm_sq);
+    for (i = 0; i < size; i++) {
+      state->vector[i].number_real *= inv_norm;
+      state->vector[i].number_imaginary *= inv_norm;
+    }
+  }
+#endif
 }
 
 int q_grover_iterations(int num_qubits) {

@@ -1,6 +1,9 @@
 #ifndef INTERNAL_H
 #define INTERNAL_H
 
+#include <pthread.h>
+#include <stddef.h> /* For size_t */
+
 /* COMPLEX NUMBERS */
 struct t_complex {
   double number_real;
@@ -16,6 +19,31 @@ struct t_complex c_one(void);
 struct t_complex c_from_real(double real);
 double c_norm_sq(struct t_complex a);
 double c_magnitude(struct t_complex a);
+
+/* SIMD-optimized bulk operations */
+void c_add_simd(struct t_complex *result, const struct t_complex *a, 
+                const struct t_complex *b, long count);
+void c_mul_simd(struct t_complex *result, const struct t_complex *a, 
+                const struct t_complex *b, long count);
+void c_copy_simd(struct t_complex *dest, const struct t_complex *src, long count);
+double c_norm_sq_sum_simd(const struct t_complex *a, long count);
+
+/* GPU-accelerated bulk operations */
+void c_add_gpu(struct t_complex *result, const struct t_complex *a, 
+                const struct t_complex *b, long count);
+void c_mul_gpu(struct t_complex *result, const struct t_complex *a, 
+                const struct t_complex *b, long count);
+void c_copy_gpu(struct t_complex *dest, const struct t_complex *src, long count);
+double c_norm_sq_sum_gpu(const struct t_complex *a, long count);
+
+/* Real GPU-accelerated operations using OpenCL */
+void c_add_gpu_real(struct t_complex *result, const struct t_complex *a, 
+                    const struct t_complex *b, long count);
+void c_mul_gpu_real(struct t_complex *result, const struct t_complex *a, 
+                    const struct t_complex *b, long count);
+void c_copy_gpu_real(struct t_complex *dest, const struct t_complex *src, long count);
+double c_norm_sq_sum_gpu_real(const struct t_complex *a, long count);
+
 
 /* QUANTUM STATE VECTOR */
 struct t_q_state {
@@ -61,6 +89,8 @@ void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
                      int target_qubit);
 void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
                      int control_qubit, int target_qubit);
+
+/* Pragma-controlled gate operations */
 
 /* QUANTUM UTILS */
 void q_state_normalize(struct t_q_state *state);

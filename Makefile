@@ -5,13 +5,40 @@ PROFILE_DIR = profile
 LOG_DIR = log
 
 CC = gcc
-CFLAGS = -std=c89 -O3 -march=native -pg -g -Wall -Wextra -pedantic -I$(INCLUDE_DIR)
-LDFLAGS = -lm -pthread
+CFLAGS = -std=c89 -O3 -march=native -mavx2 -mfma -pg -g -Wall -Wextra -pedantic -I$(INCLUDE_DIR)
+LDFLAGS = -lm -pthread -fopenmp -lOpenCL
 AR = ar
 ARFLAGS = rcs
 
+# Single header approach - include all source files
+# Parallelization mode is selected at compile time with preprocessor definitions
+# Default: sequential (no parallelization overhead)
+# Options: QCS_MULTI_THREAD, QCS_CPU_OPENMP, QCS_GPU_OPENCL, QCS_SIMD_ONLY
+PARALLEL_MODE ?= 
+
+# Add parallelization-specific flags
+ifeq ($(PARALLEL_MODE),QCS_MULTI_THREAD)
+  CFLAGS += -DQCS_MULTI_THREAD
+  LDFLAGS += -pthread
+endif
+
+ifeq ($(PARALLEL_MODE),QCS_CPU_OPENMP)
+  CFLAGS += -DQCS_CPU_OPENMP -fopenmp
+  LDFLAGS += -fopenmp
+endif
+
+ifeq ($(PARALLEL_MODE),QCS_GPU_OPENCL)
+  CFLAGS += -DQCS_GPU_OPENCL
+  LDFLAGS += -lOpenCL
+endif
+
+ifeq ($(PARALLEL_MODE),QCS_SIMD_ONLY)
+  CFLAGS += -DQCS_SIMD_ONLY
+endif
+
 LOG_FILE = $(LOG_DIR)/$(TARGET).build_log
 
+# Include all source files - parallelization is handled by preprocessor definitions
 LIB_SRCS  := $(filter-out $(SRC_DIR)/main.c, $(wildcard $(SRC_DIR)/*.c))
 MAIN_SRC  := $(SRC_DIR)/main.c
 

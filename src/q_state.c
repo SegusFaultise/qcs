@@ -5,7 +5,9 @@
 
 #define CACHE_LINE_SIZE 64
 
+#ifdef QCS_MULTI_THREAD
 extern thread_pool_t *pool;
+#endif
 
 static void q_state_init_worker(void *arg) {
   struct t_thread_args *args = (struct t_thread_args *)arg;
@@ -57,6 +59,7 @@ struct t_q_state *q_state_init(int num_qubits) {
   state->qubits_num = num_qubits;
   state->size = size;
 
+#ifdef QCS_MULTI_THREAD
   for (i = 0; i < pool->num_threads; i++) {
     long start, end;
 
@@ -77,6 +80,14 @@ struct t_q_state *q_state_init(int num_qubits) {
   }
 
   thread_pool_wait(pool);
+#else
+  /* Sequential initialization */
+  for (i = 0; i < size; i++) {
+    state->vector[i] = c_zero();
+    state->scratch_vector[i] = c_zero();
+  }
+#endif
+
   state->vector[0] = c_one();
   return state;
 }
