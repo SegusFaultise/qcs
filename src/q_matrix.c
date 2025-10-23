@@ -3,6 +3,12 @@
 
 #include "internal.h"
 
+/**
+ * Initialize a quantum matrix with specified dimensions
+ * @param rows Number of rows
+ * @param cols Number of columns
+ * @return Pointer to allocated matrix or NULL on failure
+ */
 struct t_q_matrix *q_matrix_init(int rows, int cols) {
   struct t_q_matrix *mat;
   int size = rows * cols;
@@ -30,6 +36,10 @@ struct t_q_matrix *q_matrix_init(int rows, int cols) {
   return mat;
 }
 
+/**
+ * Free memory allocated for a quantum matrix
+ * @param mat Matrix to free
+ */
 void q_matrix_free(struct t_q_matrix *mat) {
   if (mat) {
     if (mat->data) {
@@ -41,6 +51,11 @@ void q_matrix_free(struct t_q_matrix *mat) {
 
 #define BLOCK_SIZE 64
 
+/**
+ * Apply a quantum gate matrix to a quantum state vector
+ * @param state Quantum state vector
+ * @param gate Gate matrix to apply
+ */
 void q_gate_apply(struct t_q_state *state, const struct t_q_matrix *gate) {
   struct t_complex *new_vector = state->scratch_vector;
   struct t_complex *vector = state->vector;

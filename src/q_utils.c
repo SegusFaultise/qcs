@@ -8,6 +8,10 @@
 extern thread_pool_t *pool;
 #endif
 
+/**
+ * Worker function for parallel normalization sum calculation
+ * @param arg Thread arguments containing state and range
+ */
 static void normalize_sum_worker(void *arg) {
   struct t_thread_args *args = (struct t_thread_args *)arg;
   args->reduction_result.sums.partial_real_sum = 0.0;
@@ -18,6 +22,10 @@ static void normalize_sum_worker(void *arg) {
   }
 }
 
+/**
+ * Worker function for parallel normalization division
+ * @param arg Thread arguments containing state and range
+ */
 static void normalize_divide_worker(void *arg) {
   struct t_thread_args *args = (struct t_thread_args *)arg;
   double inv_norm = args->mean.number_real;
@@ -29,6 +37,10 @@ static void normalize_divide_worker(void *arg) {
   free(args);
 }
 
+/**
+ * Normalize quantum state vector to unit length
+ * @param state Quantum state to normalize
+ */
 void q_state_normalize(struct t_q_state *state) {
   if (state == NULL || state->vector == NULL)
     return;
@@ -45,7 +57,6 @@ void q_state_normalize(struct t_q_state *state) {
   if (!reduction_args_list)
     exit(EXIT_FAILURE);
 
-  /* Calculate sum of squares in parallel */
   for (i = 0; i < pool->num_threads; i++) {
     long start, end;
     get_thread_work_range(size, pool->num_threads, i, &start, &end);
@@ -62,7 +73,6 @@ void q_state_normalize(struct t_q_state *state) {
   }
   thread_pool_wait(pool);
 
-  /* Aggregate results */
   for (i = 0; i < pool->num_threads; i++) {
     total_norm_sq +=
         reduction_args_list[i]->reduction_result.sums.partial_real_sum;
@@ -70,7 +80,6 @@ void q_state_normalize(struct t_q_state *state) {
   }
   free(reduction_args_list);
 
-  /* Apply normalization factor in parallel */
   if (total_norm_sq > 1e-12 && total_norm_sq != 1.0) {
     double inv_norm = 1.0 / sqrt(total_norm_sq);
     for (i = 0; i < pool->num_threads; i++) {
@@ -84,24 +93,21 @@ void q_state_normalize(struct t_q_state *state) {
       div_args->start = start;
       div_args->end = end;
       div_args->state = state;
-      div_args->mean.number_real =
-          inv_norm; /* Re-using mean field for the scalar */
+      div_args->mean.number_real = inv_norm;
+
       thread_pool_add_task(pool, normalize_divide_worker, div_args);
     }
     thread_pool_wait(pool);
   }
 #else
-  /* Sequential normalization */
   long i;
   long size = state->size;
   double total_norm_sq = 0.0;
 
-  /* Calculate sum of squares */
   for (i = 0; i < size; i++) {
     total_norm_sq += c_norm_sq(state->vector[i]);
   }
 
-  /* Apply normalization factor */
   if (total_norm_sq > 1e-12 && total_norm_sq != 1.0) {
     double inv_norm = 1.0 / sqrt(total_norm_sq);
     for (i = 0; i < size; i++) {
@@ -112,6 +118,11 @@ void q_state_normalize(struct t_q_state *state) {
 #endif
 }
 
+/**
+ * Calculate optimal number of Grover iterations
+ * @param num_qubits Number of qubits in the system
+ * @return Number of iterations needed
+ */
 int q_grover_iterations(int num_qubits) {
   double const m_pi = (3.14159265358979323846);
   double N = (double)(1 << num_qubits);

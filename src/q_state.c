@@ -9,6 +9,10 @@
 extern thread_pool_t *pool;
 #endif
 
+/**
+ * Worker function for parallel state initialization
+ * @param arg Thread arguments containing state and range
+ */
 static void q_state_init_worker(void *arg) {
   struct t_thread_args *args = (struct t_thread_args *)arg;
   long i;
@@ -20,6 +24,11 @@ static void q_state_init_worker(void *arg) {
   free(args);
 }
 
+/**
+ * Initialize a quantum state vector with specified number of qubits
+ * @param num_qubits Number of qubits in the system
+ * @return Pointer to allocated state or NULL on failure
+ */
 struct t_q_state *q_state_init(int num_qubits) {
   struct t_q_state *state;
   long size;
@@ -81,7 +90,6 @@ struct t_q_state *q_state_init(int num_qubits) {
 
   thread_pool_wait(pool);
 #else
-  /* Sequential initialization */
   for (i = 0; i < size; i++) {
     state->vector[i] = c_zero();
     state->scratch_vector[i] = c_zero();
@@ -92,6 +100,10 @@ struct t_q_state *q_state_init(int num_qubits) {
   return state;
 }
 
+/**
+ * Free memory allocated for a quantum state
+ * @param state State to free
+ */
 void q_state_free(struct t_q_state *state) {
   if (state) {
     if (state->vector)
@@ -102,6 +114,11 @@ void q_state_free(struct t_q_state *state) {
   }
 }
 
+/**
+ * Set quantum state to a specific basis state
+ * @param state Quantum state to modify
+ * @param index_basis Basis state index
+ */
 void q_state_set_basis(struct t_q_state *state, int index_basis) {
   long i;
   if (state == NULL || index_basis < 0 || index_basis >= state->size) {
@@ -114,6 +131,11 @@ void q_state_set_basis(struct t_q_state *state, int index_basis) {
   state->vector[index_basis] = c_one();
 }
 
+/**
+ * Print quantum state vector with optional solution highlighting
+ * @param state Quantum state to print
+ * @param solution_index Index to highlight (or -1 for none)
+ */
 void q_state_print(const struct t_q_state *state, int solution_index) {
   long i;
   int max_print = state->size > 8 ? 4 : state->size;

@@ -22,6 +22,11 @@ struct t_q_circuit {
   int history_capacity;
 };
 
+/**
+ * Create a new quantum circuit with specified number of qubits
+ * @param num_qubits Number of qubits in the circuit
+ * @return Pointer to created circuit or NULL on failure
+ */
 t_q_circuit *qc_create(int num_qubits) {
   #ifdef QCS_MULTI_THREAD
   if (pool == NULL) {
@@ -30,7 +35,6 @@ t_q_circuit *qc_create(int num_qubits) {
     if (num_cores < 1)
       num_cores = 2;
 
-    /* Limit thread pool size to reduce overhead - use fewer threads for better performance */
     int effective_threads = (num_cores > 4) ? 4 : num_cores;
     pool = thread_pool_create(effective_threads, 16);
 
@@ -63,6 +67,10 @@ t_q_circuit *qc_create(int num_qubits) {
   return circuit;
 }
 
+/**
+ * Destroy a quantum circuit and free all associated memory
+ * @param circuit Circuit to destroy
+ */
 void qc_destroy(t_q_circuit *circuit) {
   #ifdef QCS_MULTI_THREAD
   if (pool != NULL) {
@@ -93,6 +101,11 @@ void qc_destroy(t_q_circuit *circuit) {
 }
 
 
+/**
+ * Duplicate a string with memory allocation
+ * @param str String to duplicate
+ * @return Duplicated string or NULL on failure
+ */
 static char *qc_strdup(const char *str) {
   size_t len;
   char *copy;
@@ -108,6 +121,14 @@ static char *qc_strdup(const char *str) {
   return copy;
 }
 
+/**
+ * Add a gate to the circuit history
+ * @param circuit Quantum circuit
+ * @param gate_name Name of the gate
+ * @param target Target qubit index
+ * @param control Control qubit index (or -1 if none)
+ * @param param Gate parameter value
+ */
 void qc_add_gate(t_q_circuit *circuit, const char *gate_name, int target,
                  int control, double param) {
   if (circuit->history_size >= circuit->history_capacity) {
@@ -130,6 +151,11 @@ void qc_add_gate(t_q_circuit *circuit, const char *gate_name, int target,
   circuit->num_gates++;
 }
 
+/**
+ * Apply Hadamard gate to specified qubit
+ * @param circuit Quantum circuit
+ * @param qubit Target qubit index
+ */
 void qc_h(t_q_circuit *circuit, int qubit) {
   struct t_q_matrix *H = q_gate_H();
   q_apply_1q_gate(circuit->state, H, qubit);
@@ -137,6 +163,11 @@ void qc_h(t_q_circuit *circuit, int qubit) {
   qc_add_gate(circuit, "H", qubit, -1, 0.0);
 }
 
+/**
+ * Apply X (Pauli-X) gate to specified qubit
+ * @param circuit Quantum circuit
+ * @param qubit Target qubit index
+ */
 void qc_x(t_q_circuit *circuit, int qubit) {
   struct t_q_matrix *X = q_gate_X();
   q_apply_1q_gate(circuit->state, X, qubit);
@@ -144,6 +175,12 @@ void qc_x(t_q_circuit *circuit, int qubit) {
   qc_add_gate(circuit, "X", qubit, -1, 0.0);
 }
 
+/**
+ * Apply CNOT (controlled-X) gate
+ * @param circuit Quantum circuit
+ * @param control Control qubit index
+ * @param target Target qubit index
+ */
 void qc_cnot(t_q_circuit *circuit, int control, int target) {
   struct t_q_matrix *X = q_gate_X();
 
@@ -152,6 +189,12 @@ void qc_cnot(t_q_circuit *circuit, int control, int target) {
   qc_add_gate(circuit, "CNOT", target, control, 0.0);
 }
 
+/**
+ * Apply RX (rotation around X-axis) gate to specified qubit
+ * @param circuit Quantum circuit
+ * @param qubit Target qubit index
+ * @param angle Rotation angle in radians
+ */
 void qc_rx(t_q_circuit *circuit, int qubit, double angle) {
   struct t_q_matrix *RX = q_gate_RX(angle);
   q_apply_1q_gate(circuit->state, RX, qubit);
@@ -159,6 +202,12 @@ void qc_rx(t_q_circuit *circuit, int qubit, double angle) {
   qc_add_gate(circuit, "RX", qubit, -1, angle);
 }
 
+/**
+ * Apply RY (rotation around Y-axis) gate to specified qubit
+ * @param circuit Quantum circuit
+ * @param qubit Target qubit index
+ * @param angle Rotation angle in radians
+ */
 void qc_ry(t_q_circuit *circuit, int qubit, double angle) {
   struct t_q_matrix *RY = q_gate_RY(angle);
   q_apply_1q_gate(circuit->state, RY, qubit);
@@ -166,6 +215,12 @@ void qc_ry(t_q_circuit *circuit, int qubit, double angle) {
   qc_add_gate(circuit, "RY", qubit, -1, angle);
 }
 
+/**
+ * Apply RZ (rotation around Z-axis) gate to specified qubit
+ * @param circuit Quantum circuit
+ * @param qubit Target qubit index
+ * @param angle Rotation angle in radians
+ */
 void qc_rz(t_q_circuit *circuit, int qubit, double angle) {
   struct t_q_matrix *RZ = q_gate_RZ(angle);
   q_apply_1q_gate(circuit->state, RZ, qubit);
@@ -173,6 +228,12 @@ void qc_rz(t_q_circuit *circuit, int qubit, double angle) {
   qc_add_gate(circuit, "RZ", qubit, -1, angle);
 }
 
+/**
+ * Measure a single qubit and collapse the quantum state
+ * @param circuit Quantum circuit
+ * @param qubit Qubit to measure
+ * @return Measured value (0 or 1)
+ */
 int qc_measure(t_q_circuit *circuit, int qubit) {
   long state_size;
   double prob_0;
@@ -208,7 +269,6 @@ int qc_measure(t_q_circuit *circuit, int qubit) {
     }
     q_state_normalize(circuit->state);
     return 0;
-    /* PTHREADS THREAD POOL*/
 
   } else {
     for (i = 0; i < state_size; i++) {
@@ -223,6 +283,11 @@ int qc_measure(t_q_circuit *circuit, int qubit) {
   }
 }
 
+/**
+ * Measure all qubits in the circuit
+ * @param circuit Quantum circuit
+ * @param results Array to store measurement results
+ */
 void qc_measure_all(t_q_circuit *circuit, int *results) {
   if (circuit == NULL || results == NULL)
     return;
@@ -236,6 +301,10 @@ void qc_measure_all(t_q_circuit *circuit, int *results) {
   qc_add_gate(circuit, "MEASURE", -1, -1, 0.0);
 }
 
+/**
+ * Print the quantum circuit gate history
+ * @param circuit Quantum circuit to print
+ */
 void qc_print_circuit(t_q_circuit *circuit) {
   int q;
   int g;
@@ -304,16 +373,32 @@ void qc_print_circuit(t_q_circuit *circuit) {
   printf("\n\n");
 }
 
+/**
+ * Print the quantum state vector
+ * @param circuit Quantum circuit
+ * @param solution_index Index to highlight (or -1 for none)
+ */
 void qc_print_state(t_q_circuit *circuit, int solution_index) {
   q_state_print(circuit->state, solution_index);
 }
 
+/**
+ * Get the probability amplitude for a specific quantum state
+ * @param circuit Quantum circuit
+ * @param state State index
+ * @return Probability amplitude (0.0 to 1.0)
+ */
 double qc_get_probability(t_q_circuit *circuit, int state) {
   if (state < 0 || state >= circuit->state->size)
     return 0.0;
   return c_norm_sq(circuit->state->vector[state]);
 }
 
+/**
+ * Apply Grover's search algorithm to find a specific quantum state
+ * @param circuit Quantum circuit
+ * @param solution_state Target state to search for
+ */
 void qc_grover_search(t_q_circuit *circuit, int solution_state) {
   int q;
   int i;
@@ -336,6 +421,13 @@ void qc_grover_search(t_q_circuit *circuit, int solution_state) {
 int qc_get_num_qubits(t_q_circuit *circuit) { return circuit->num_qubits; }
 int qc_get_num_gates(t_q_circuit *circuit) { return circuit->num_gates; }
 
+/**
+ * Apply controlled phase gate
+ * @param circuit Quantum circuit
+ * @param control Control qubit index
+ * @param target Target qubit index
+ * @param angle Phase angle in radians
+ */
 void qc_cphase(t_q_circuit *circuit, int control, int target, double angle) {
   struct t_q_matrix *CP = q_gate_CP(angle);
 
@@ -344,6 +436,10 @@ void qc_cphase(t_q_circuit *circuit, int control, int target, double angle) {
   qc_add_gate(circuit, "CPHASE", target, control, angle);
 }
 
+/**
+ * Apply quantum Fourier transform to the circuit
+ * @param circuit Quantum circuit
+ */
 void qc_quantum_fourier_transform(t_q_circuit *circuit) {
   double const m_pi = (3.14159265358979323846);
 
@@ -360,6 +456,11 @@ void qc_quantum_fourier_transform(t_q_circuit *circuit) {
   }
 }
 
+/**
+ * Find the quantum state with the highest probability amplitude
+ * @param circuit Quantum circuit
+ * @return Index of the most likely state
+ */
 int qc_find_most_likely_state(t_q_circuit *circuit) {
   long max_idx = 0;
   double max_prob = 0.0;
@@ -376,6 +477,11 @@ int qc_find_most_likely_state(t_q_circuit *circuit) {
   return (int)max_idx;
 }
 
+/**
+ * Apply Y (Pauli-Y) gate to specified qubit
+ * @param circuit Quantum circuit
+ * @param qubit Target qubit index
+ */
 void qc_y(t_q_circuit *circuit, int qubit) {
   struct t_q_matrix *Y = q_gate_Y();
   q_apply_1q_gate(circuit->state, Y, qubit);
@@ -383,6 +489,11 @@ void qc_y(t_q_circuit *circuit, int qubit) {
   qc_add_gate(circuit, "Y", qubit, -1, 0.0);
 }
 
+/**
+ * Apply Z (Pauli-Z) gate to specified qubit
+ * @param circuit Quantum circuit
+ * @param qubit Target qubit index
+ */
 void qc_z(t_q_circuit *circuit, int qubit) {
   struct t_q_matrix *Z = q_gate_Z();
   q_apply_1q_gate(circuit->state, Z, qubit);
@@ -390,6 +501,12 @@ void qc_z(t_q_circuit *circuit, int qubit) {
   qc_add_gate(circuit, "Z", qubit, -1, 0.0);
 }
 
+/**
+ * Apply phase gate to specified qubit
+ * @param circuit Quantum circuit
+ * @param qubit Target qubit index
+ * @param angle Phase angle in radians
+ */
 void qc_phase(t_q_circuit *circuit, int qubit, double angle) {
   struct t_q_matrix *P = q_gate_P(angle);
   q_apply_1q_gate(circuit->state, P, qubit);
@@ -397,6 +514,10 @@ void qc_phase(t_q_circuit *circuit, int qubit, double angle) {
   qc_add_gate(circuit, "P", qubit, -1, angle);
 }
 
+/**
+ * Create a GHZ (Greenberger-Horne-Zeilinger) entangled state
+ * @param circuit Quantum circuit
+ */
 void qc_ghz_state(t_q_circuit *circuit) {
   int n = circuit->num_qubits;
   int i;
@@ -413,10 +534,19 @@ void qc_ghz_state(t_q_circuit *circuit) {
   }
 }
 
+/**
+ * Add a barrier to the quantum circuit
+ * @param circuit Quantum circuit
+ */
 void qc_barrier(t_q_circuit *circuit) {
   qc_add_gate(circuit, "BARRIER", -1, -1, 0.0);
 }
 
+/**
+ * Reset a qubit to the |0⟩ state
+ * @param circuit Quantum circuit
+ * @param qubit Qubit to reset
+ */
 void qc_reset(t_q_circuit *circuit, int qubit) {
   if (qc_measure(circuit, qubit) == 1) {
     qc_x(circuit, qubit);
@@ -424,6 +554,10 @@ void qc_reset(t_q_circuit *circuit, int qubit) {
   qc_add_gate(circuit, "RESET", qubit, -1, 0.0);
 }
 
+/**
+ * Run the quantum circuit and perform final measurements
+ * @param circuit Quantum circuit
+ */
 void qc_run(t_q_circuit *circuit) {
   int *results = malloc(circuit->num_qubits * sizeof(int));
   if (results) {
@@ -432,6 +566,12 @@ void qc_run(t_q_circuit *circuit) {
   }
 }
 
+/**
+ * Run multiple shots of the quantum circuit
+ * @param circuit Quantum circuit
+ * @param shots Number of shots to run
+ * @param results Array to store shot results
+ */
 void qc_run_shots(t_q_circuit *circuit, int shots, int *results) {
   long i;
   int s;
@@ -466,6 +606,11 @@ void qc_run_shots(t_q_circuit *circuit, int shots, int *results) {
   free(probabilities);
 }
 
+/**
+ * Implement Bernstein-Vazirani algorithm
+ * @param circuit Quantum circuit
+ * @param hidden_string Hidden string to find
+ */
 void qc_bernstein_vazirani(t_q_circuit *circuit, int hidden_string) {
   int n = circuit->num_qubits - 1;
   int i;
@@ -498,6 +643,10 @@ void qc_bernstein_vazirani(t_q_circuit *circuit, int hidden_string) {
   }
 }
 
+/**
+ * Optimize the quantum circuit by removing redundant gates
+ * @param circuit Quantum circuit to optimize
+ */
 void qc_optimize(t_q_circuit *circuit) {
   int i;
   char *gate1_name;

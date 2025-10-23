@@ -5,22 +5,23 @@
 
 #include "internal.h"
 
-/* Forward declarations for worker functions */
 #ifdef QCS_MULTI_THREAD
 static void q_apply_1q_gate_worker(void *arg);
 static void q_apply_2q_gate_worker(void *arg);
 #endif
 
-/* Forward declarations for GPU functions */
 #ifdef QCS_GPU_OPENCL
 void q_apply_1q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate, int target_qubit);
 void q_apply_2q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate, 
                          int control_qubit, int target_qubit);
 #endif
 
-/* Base sequential implementation - no parallelization overhead */
-/* This is the default implementation when no parallelization is requested */
-
+/**
+ * Apply a 1-qubit quantum gate to the quantum state
+ * @param state Quantum state vector
+ * @param gate 2x2 gate matrix
+ * @param target_qubit Target qubit index
+ */
 void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
                      int target_qubit) {
   long size = state->size;
@@ -34,12 +35,9 @@ void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
     return;
   }
 
-  /* Choose implementation based on preprocessor definitions */
   #ifdef QCS_GPU_OPENCL
-    /* GPU-accelerated implementation */
     q_apply_1q_gate_gpu(state, gate, target_qubit);
   #elif defined(QCS_CPU_OPENMP)
-    /* OpenMP parallel implementation */
     c_copy_simd(state->scratch_vector, state->vector, size);
     
     #ifdef _OPENMP
@@ -56,7 +54,6 @@ void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
         }
     }
     #else
-    /* Fallback to sequential if OpenMP not available */
     for (i = 0; i < size; i += block_size) {
         for (j = i; j < i + step; j++) {
             long index0 = j;
@@ -71,7 +68,6 @@ void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
     #endif
     
   #elif defined(QCS_GPU_OPENCL)
-    /* GPU OpenCL implementation */
     c_copy_gpu_real(state->scratch_vector, state->vector, size);
     
     for (i = 0; i < size; i += block_size) {
@@ -87,7 +83,6 @@ void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
     }
     
   #elif defined(QCS_SIMD_ONLY)
-    /* SIMD-only implementation */
     c_copy_simd(state->scratch_vector, state->vector, size);
     
     for (i = 0; i < size; i += block_size) {
@@ -103,13 +98,10 @@ void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
     }
     
   #elif defined(QCS_MULTI_THREAD)
-    /* Multi-thread implementation using pthread */
     extern thread_pool_t *pool;
     
-    /* Copy state vector to scratch vector */
     memcpy(state->scratch_vector, state->vector, size * sizeof(struct t_complex));
 
-    /* Use thread pool for parallel execution */
     int effective_threads = (pool->num_threads > 4) ? 4 : pool->num_threads;
     long num_blocks = size / block_size;
     long blocks_per_thread = (num_blocks + effective_threads - 1) / effective_threads;
@@ -136,7 +128,6 @@ void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
     thread_pool_wait(pool);
     
   #else
-    /* Default: Pure sequential implementation (no parallelization overhead) */
     memcpy(state->scratch_vector, state->vector, size * sizeof(struct t_complex));
 
     for (i = 0; i < size; i += block_size) {
@@ -152,12 +143,18 @@ void q_apply_1q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
     }
   #endif
 
-  /* Swap vectors */
   struct t_complex *temp = state->vector;
   state->vector = state->scratch_vector;
   state->scratch_vector = temp;
 }
 
+/**
+ * Apply a 2-qubit quantum gate to the quantum state
+ * @param state Quantum state vector
+ * @param gate 4x4 gate matrix
+ * @param control_qubit Control qubit index
+ * @param target_qubit Target qubit index
+ */
 void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
                      int control_qubit, int target_qubit) {
   long size = state->size;
@@ -172,12 +169,9 @@ void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
     return;
   }
 
-  /* Choose implementation based on preprocessor definitions */
   #ifdef QCS_GPU_OPENCL
-    /* GPU-accelerated implementation */
     q_apply_2q_gate_gpu(state, gate, control_qubit, target_qubit);
   #elif defined(QCS_CPU_OPENMP)
-    /* OpenMP parallel implementation */
     c_copy_simd(state->scratch_vector, state->vector, size);
     
     #ifdef _OPENMP
@@ -197,7 +191,6 @@ void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
         }
     }
     #else
-    /* Fallback to sequential if OpenMP not available */
     for (i = 0; i < size; i++) {
         if ((i & c_bit) != 0 && (i & t_bit) == 0) {
             long index0 = i;
@@ -215,7 +208,6 @@ void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
     #endif
     
   #elif defined(QCS_GPU_OPENCL)
-    /* GPU OpenCL implementation */
     c_copy_gpu_real(state->scratch_vector, state->vector, size);
     
     for (i = 0; i < size; i++) {
@@ -234,7 +226,6 @@ void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
     }
     
   #elif defined(QCS_SIMD_ONLY)
-    /* SIMD-only implementation */
     c_copy_simd(state->scratch_vector, state->vector, size);
     
     for (i = 0; i < size; i++) {
@@ -253,13 +244,10 @@ void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
     }
     
   #elif defined(QCS_MULTI_THREAD)
-    /* Multi-thread implementation using pthread */
     extern thread_pool_t *pool;
     
-    /* Copy state vector to scratch vector */
     memcpy(state->scratch_vector, state->vector, size * sizeof(struct t_complex));
 
-    /* Use thread pool for parallel execution */
     int effective_threads = (pool->num_threads > 4) ? 4 : pool->num_threads;
     long work_per_thread = (size + effective_threads - 1) / effective_threads;
     int k;
@@ -286,7 +274,6 @@ void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
     thread_pool_wait(pool);
     
   #else
-    /* Default: Pure sequential implementation (no parallelization overhead) */
     memcpy(state->scratch_vector, state->vector, size * sizeof(struct t_complex));
 
     for (i = 0; i < size; i++) {
@@ -305,12 +292,16 @@ void q_apply_2q_gate(struct t_q_state *state, const struct t_q_matrix *gate,
     }
   #endif
 
-  /* Swap vectors */
   struct t_complex *temp = state->vector;
   state->vector = state->scratch_vector;
   state->scratch_vector = temp;
 }
 
+/**
+ * Apply phase flip to a specific quantum state
+ * @param state Quantum state vector
+ * @param index Index of state to flip
+ */
 void q_apply_phase_flip(struct t_q_state *state, int index) {
   if (state == NULL || index < 0 || index >= state->size) {
     fprintf(stderr, "Error: Invalid state or index for phase flip.\n");
@@ -325,6 +316,10 @@ void q_apply_phase_flip(struct t_q_state *state, int index) {
   state->vector[index].number_imaginary = -state->scratch_vector[index].number_imaginary;
 }
 
+/**
+ * Apply diffusion operator for Grover's algorithm
+ * @param state Quantum state vector
+ */
 void q_apply_diffusion(struct t_q_state *state) {
   if (state == NULL) {
     fprintf(stderr, "Error: Invalid state for diffusion.\n");
@@ -336,7 +331,6 @@ void q_apply_diffusion(struct t_q_state *state) {
   struct t_complex mean = c_zero();
   double mean_magnitude;
 
-  /* Calculate mean amplitude */
   for (i = 0; i < size; i++) {
     mean = c_add(mean, state->vector[i]);
   }
@@ -347,7 +341,6 @@ void q_apply_diffusion(struct t_q_state *state) {
     mean.number_imaginary /= mean_magnitude;
   }
 
-  /* Apply diffusion transformation */
   struct t_complex two_mean = {2.0 * mean.number_real, 2.0 * mean.number_imaginary};
   
   struct t_complex *temp = state->vector;
@@ -362,7 +355,10 @@ void q_apply_diffusion(struct t_q_state *state) {
   }
 }
 
-/* Gate matrix definitions */
+/**
+ * Create identity gate matrix
+ * @return Identity gate matrix
+ */
 struct t_q_matrix *q_gate_I(void) {
   struct t_q_matrix *i = q_matrix_init(2, 2);
   if (!i)
@@ -372,6 +368,10 @@ struct t_q_matrix *q_gate_I(void) {
   return i;
 }
 
+/**
+ * Create X (Pauli-X) gate matrix
+ * @return X gate matrix
+ */
 struct t_q_matrix *q_gate_X(void) {
   struct t_q_matrix *X = q_matrix_init(2, 2);
   if (!X)
@@ -381,6 +381,10 @@ struct t_q_matrix *q_gate_X(void) {
   return X;
 }
 
+/**
+ * Create Hadamard gate matrix
+ * @return Hadamard gate matrix
+ */
 struct t_q_matrix *q_gate_H(void) {
   double root2_inv = 1.0 / sqrt(2.0);
   struct t_complex factor = c_from_real(root2_inv);
@@ -405,6 +409,10 @@ struct t_q_matrix *q_gate_CP(double angle) {
   return CP;
 }
 
+/**
+ * Create Y (Pauli-Y) gate matrix
+ * @return Y gate matrix
+ */
 struct t_q_matrix *q_gate_Y(void) {
   struct t_q_matrix *Y = q_matrix_init(2, 2);
   if (!Y)
@@ -414,6 +422,10 @@ struct t_q_matrix *q_gate_Y(void) {
   return Y;
 }
 
+/**
+ * Create Z (Pauli-Z) gate matrix
+ * @return Z gate matrix
+ */
 struct t_q_matrix *q_gate_Z(void) {
   struct t_q_matrix *Z = q_matrix_init(2, 2);
   if (!Z)
@@ -478,7 +490,6 @@ struct t_q_matrix *q_gate_RZ(double angle) {
   return RZ;
 }
 
-/* Worker functions for multi-threaded implementation */
 #ifdef QCS_MULTI_THREAD
 static void q_apply_1q_gate_worker(void *arg) {
   struct t_thread_args *args = (struct t_thread_args *)arg;

@@ -1,8 +1,8 @@
 #include "internal.h"
 #include <math.h>
 #include <CL/cl.h>
+#include <stdio.h>
 
-/* OpenCL GPU acceleration for complex number operations */
 static cl_context gpu_context = NULL;
 static cl_command_queue gpu_queue = NULL;
 static cl_device_id gpu_device = NULL;
@@ -14,13 +14,10 @@ static cl_kernel norm_kernel = NULL;
 static cl_kernel gate_1q_kernel = NULL;
 static cl_kernel gate_2q_kernel = NULL;
 
-/* Persistent GPU memory for quantum state */
 static cl_mem persistent_state_buffer = NULL;
 static cl_mem persistent_scratch_buffer = NULL;
 static long persistent_buffer_size = 0;
 static int gpu_initialized = 0;
-
-/* OpenCL kernel source code */
 static const char* kernel_source = 
 "__kernel void complex_add(__global float2* a, __global float2* b, __global float2* result, int count) {\n"
 "    int i = get_global_id(0);\n"
@@ -157,20 +154,21 @@ static const char* kernel_source =
 "    }\n"
 "}\n";
 
-/* Initialize OpenCL GPU context */
+/**
+ * Initialize OpenCL GPU context and create kernels for quantum operations
+ * @return 1 on success, 0 on failure
+ */
 static int init_gpu_context(void) {
     cl_int err;
     cl_platform_id platforms[10];
     cl_uint num_platforms;
     int i;
     
-    /* Get all OpenCL platforms */
     err = clGetPlatformIDs(10, platforms, &num_platforms);
     if (err != CL_SUCCESS || num_platforms == 0) {
         return 0;
     }
     
-    /* Search for GPU device across all platforms */
     for (i = 0; i < num_platforms; i++) {
         err = clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_GPU, 1, &gpu_device, NULL);
         if (err == CL_SUCCESS) {
@@ -182,31 +180,25 @@ static int init_gpu_context(void) {
         return 0;
     }
     
-    /* Create context */
     gpu_context = clCreateContext(NULL, 1, &gpu_device, NULL, NULL, &err);
     if (err != CL_SUCCESS) {
         return 0;
     }
     
-    /* Create command queue */
     gpu_queue = clCreateCommandQueue(gpu_context, gpu_device, 0, &err);
     if (err != CL_SUCCESS) {
         return 0;
     }
     
-    /* Create program */
     gpu_program = clCreateProgramWithSource(gpu_context, 1, &kernel_source, NULL, &err);
     if (err != CL_SUCCESS) {
         return 0;
     }
     
-    /* Build program */
     err = clBuildProgram(gpu_program, 1, &gpu_device, NULL, NULL, NULL);
     if (err != CL_SUCCESS) {
         return 0;
     }
-    
-    /* Create kernels */
     add_kernel = clCreateKernel(gpu_program, "complex_add", &err);
     if (err != CL_SUCCESS) return 0;
     
@@ -228,7 +220,9 @@ static int init_gpu_context(void) {
     return 1;
 }
 
-/* Cleanup OpenCL resources */
+/**
+ * Cleanup OpenCL resources and release all GPU memory
+ */
 static void cleanup_gpu_context(void) {
     if (persistent_scratch_buffer) clReleaseMemObject(persistent_scratch_buffer);
     if (persistent_state_buffer) clReleaseMemObject(persistent_state_buffer);
@@ -248,15 +242,18 @@ static void cleanup_gpu_context(void) {
     gpu_initialized = 0;
 }
 
-/* Initialize persistent GPU memory for quantum state */
+/**
+ * Initialize persistent GPU memory buffers for quantum state operations
+ * @param size Size of the quantum state vector
+ * @return 1 on success, 0 on failure
+ */
 static int init_persistent_gpu_memory(long size) {
     cl_int err;
     
     if (persistent_buffer_size >= size && persistent_state_buffer != NULL) {
-        return 1; /* Already have sufficient memory */
+        return 1;
     }
     
-    /* Clean up old buffers if they exist */
     if (persistent_state_buffer) {
         clReleaseMemObject(persistent_state_buffer);
         persistent_state_buffer = NULL;
@@ -265,8 +262,6 @@ static int init_persistent_gpu_memory(long size) {
         clReleaseMemObject(persistent_scratch_buffer);
         persistent_scratch_buffer = NULL;
     }
-    
-    /* Create new persistent buffers */
     persistent_state_buffer = clCreateBuffer(gpu_context, CL_MEM_READ_WRITE, 
                                            size * sizeof(struct t_complex), NULL, &err);
     if (err != CL_SUCCESS) return 0;
@@ -283,7 +278,11 @@ static int init_persistent_gpu_memory(long size) {
     return 1;
 }
 
-/* Upload quantum state to GPU */
+/**
+ * Upload quantum state vector to GPU memory
+ * @param state Quantum state to upload
+ * @return 1 on success, 0 on failure
+ */
 static int upload_state_to_gpu(struct t_q_state *state) {
     cl_int err;
     
@@ -296,7 +295,11 @@ static int upload_state_to_gpu(struct t_q_state *state) {
     return (err == CL_SUCCESS);
 }
 
-/* Download quantum state from GPU */
+/**
+ * Download quantum state vector from GPU memory
+ * @param state Quantum state to download to
+ * @return 1 on success, 0 on failure
+ */
 static int download_state_from_gpu(struct t_q_state *state) {
     cl_int err;
     
@@ -309,7 +312,13 @@ static int download_state_from_gpu(struct t_q_state *state) {
     return (err == CL_SUCCESS);
 }
 
-/* GPU-accelerated complex addition */
+/**
+ * GPU-accelerated complex number addition using OpenCL
+ * @param result Output array for results
+ * @param a First input array
+ * @param b Second input array
+ * @param count Number of elements to process
+ */
 void c_add_gpu_real(struct t_complex *result, const struct t_complex *a, 
                     const struct t_complex *b, long count) {
     
@@ -340,29 +349,24 @@ void c_add_gpu_real(struct t_complex *result, const struct t_complex *a,
         return;
     }
     
-    /* Set kernel arguments */
     clSetKernelArg(add_kernel, 0, sizeof(cl_mem), &a_buf);
     clSetKernelArg(add_kernel, 1, sizeof(cl_mem), &b_buf);
     clSetKernelArg(add_kernel, 2, sizeof(cl_mem), &result_buf);
     clSetKernelArg(add_kernel, 3, sizeof(int), &count);
     
-    /* Execute kernel */
     err = clEnqueueNDRangeKernel(gpu_queue, add_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
     if (err != CL_SUCCESS) {
         c_add_simd(result, a, b, count);
         return;
     }
     
-    /* Read result */
     clEnqueueReadBuffer(gpu_queue, result_buf, CL_TRUE, 0, count * sizeof(float) * 2, result, 0, NULL, NULL);
     
-    /* Cleanup */
     clReleaseMemObject(a_buf);
     clReleaseMemObject(b_buf);
     clReleaseMemObject(result_buf);
 }
 
-/* GPU-accelerated complex multiplication */
 void c_mul_gpu_real(struct t_complex *result, const struct t_complex *a, 
                     const struct t_complex *b, long count) {
     
@@ -380,7 +384,6 @@ void c_mul_gpu_real(struct t_complex *result, const struct t_complex *a,
     size_t global_size = count;
     size_t local_size = 64;
     
-    /* Create buffers */
     a_buf = clCreateBuffer(gpu_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 
                           count * sizeof(float) * 2, (void*)a, &err);
     b_buf = clCreateBuffer(gpu_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 
@@ -393,29 +396,24 @@ void c_mul_gpu_real(struct t_complex *result, const struct t_complex *a,
         return;
     }
     
-    /* Set kernel arguments */
     clSetKernelArg(mul_kernel, 0, sizeof(cl_mem), &a_buf);
     clSetKernelArg(mul_kernel, 1, sizeof(cl_mem), &b_buf);
     clSetKernelArg(mul_kernel, 2, sizeof(cl_mem), &result_buf);
     clSetKernelArg(mul_kernel, 3, sizeof(int), &count);
     
-    /* Execute kernel */
     err = clEnqueueNDRangeKernel(gpu_queue, mul_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
     if (err != CL_SUCCESS) {
         c_mul_simd(result, a, b, count);
         return;
     }
     
-    /* Read result */
     clEnqueueReadBuffer(gpu_queue, result_buf, CL_TRUE, 0, count * sizeof(float) * 2, result, 0, NULL, NULL);
     
-    /* Cleanup */
     clReleaseMemObject(a_buf);
     clReleaseMemObject(b_buf);
     clReleaseMemObject(result_buf);
 }
 
-/* GPU-accelerated memory copy */
 void c_copy_gpu_real(struct t_complex *dest, const struct t_complex *src, long count) {
     
     static int initialized = 0;
@@ -432,7 +430,6 @@ void c_copy_gpu_real(struct t_complex *dest, const struct t_complex *src, long c
     size_t global_size = count;
     size_t local_size = 64;
     
-    /* Create buffers */
     src_buf = clCreateBuffer(gpu_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 
                             count * sizeof(float) * 2, (void*)src, &err);
     dest_buf = clCreateBuffer(gpu_context, CL_MEM_WRITE_ONLY, 
@@ -443,27 +440,22 @@ void c_copy_gpu_real(struct t_complex *dest, const struct t_complex *src, long c
         return;
     }
     
-    /* Set kernel arguments */
     clSetKernelArg(copy_kernel, 0, sizeof(cl_mem), &src_buf);
     clSetKernelArg(copy_kernel, 1, sizeof(cl_mem), &dest_buf);
     clSetKernelArg(copy_kernel, 2, sizeof(int), &count);
     
-    /* Execute kernel */
     err = clEnqueueNDRangeKernel(gpu_queue, copy_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
     if (err != CL_SUCCESS) {
         c_copy_simd(dest, src, count);
         return;
     }
     
-    /* Read result */
     clEnqueueReadBuffer(gpu_queue, dest_buf, CL_TRUE, 0, count * sizeof(float) * 2, dest, 0, NULL, NULL);
     
-    /* Cleanup */
     clReleaseMemObject(src_buf);
     clReleaseMemObject(dest_buf);
 }
 
-/* GPU-accelerated norm squared calculation */
 double c_norm_sq_sum_gpu_real(const struct t_complex *a, long count) {
     
     static int initialized = 0;
@@ -482,13 +474,11 @@ double c_norm_sq_sum_gpu_real(const struct t_complex *a, long count) {
     size_t local_size = 64;
     long i;
     
-    /* Allocate temporary result array */
     temp_result = malloc(count * sizeof(float));
     if (!temp_result) {
         return c_norm_sq_sum_simd(a, count);
     }
     
-    /* Create buffers */
     a_buf = clCreateBuffer(gpu_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 
                           count * sizeof(float) * 2, (void*)a, &err);
     result_buf = clCreateBuffer(gpu_context, CL_MEM_WRITE_ONLY, 
@@ -499,27 +489,22 @@ double c_norm_sq_sum_gpu_real(const struct t_complex *a, long count) {
         return c_norm_sq_sum_simd(a, count);
     }
     
-    /* Set kernel arguments */
     clSetKernelArg(norm_kernel, 0, sizeof(cl_mem), &a_buf);
     clSetKernelArg(norm_kernel, 1, sizeof(cl_mem), &result_buf);
     clSetKernelArg(norm_kernel, 2, sizeof(int), &count);
     
-    /* Execute kernel */
     err = clEnqueueNDRangeKernel(gpu_queue, norm_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
     if (err != CL_SUCCESS) {
         free(temp_result);
         return c_norm_sq_sum_simd(a, count);
     }
     
-    /* Read result */
     clEnqueueReadBuffer(gpu_queue, result_buf, CL_TRUE, 0, count * sizeof(float), temp_result, 0, NULL, NULL);
     
-    /* Sum results */
     for (i = 0; i < count; i++) {
         sum += temp_result[i];
     }
     
-    /* Cleanup */
     clReleaseMemObject(a_buf);
     clReleaseMemObject(result_buf);
     free(temp_result);
@@ -527,23 +512,26 @@ double c_norm_sq_sum_gpu_real(const struct t_complex *a, long count) {
     return sum;
 }
 
-/* GPU-accelerated quantum gate operations with persistent memory */
+/**
+ * GPU-accelerated 1-qubit quantum gate application using persistent memory
+ * @param state Quantum state vector
+ * @param gate 2x2 gate matrix
+ * @param target_qubit Target qubit index
+ */
 void q_apply_1q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate, int target_qubit) {
     long size = state->size;
     cl_int err;
     cl_mem gate_buf;
     size_t global_size = size;
-    size_t local_size = 256; /* Increased work group size */
+    size_t local_size = 256; 
     
     if (state == NULL || gate == NULL || target_qubit < 0 || target_qubit >= state->qubits_num) {
         fprintf(stderr, "Error: Invalid arguments for 1-qubit gate application.\n");
         return;
     }
     
-    /* Initialize GPU context if not already done */
     if (!gpu_initialized) {
         if (!init_gpu_context()) {
-            /* Fallback to CPU */
             long step = 1L << target_qubit;
             long block_size = 1L << (target_qubit + 1);
             long i, j;
@@ -573,9 +561,7 @@ void q_apply_1q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate,
         gpu_initialized = 1;
     }
     
-    /* Initialize persistent GPU memory */
     if (!init_persistent_gpu_memory(size)) {
-        /* Fallback to CPU */
         long step = 1L << target_qubit;
         long block_size = 1L << (target_qubit + 1);
         long i, j;
@@ -603,11 +589,9 @@ void q_apply_1q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate,
         return;
     }
     
-    /* Upload state to GPU (only if not already there) */
     static long last_uploaded_size = 0;
     if (last_uploaded_size != size) {
         if (!upload_state_to_gpu(state)) {
-            /* Fallback to CPU */
             long step = 1L << target_qubit;
             long block_size = 1L << (target_qubit + 1);
             long i, j;
@@ -637,11 +621,9 @@ void q_apply_1q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate,
         last_uploaded_size = size;
     }
     
-    /* Create gate matrix buffer */
     gate_buf = clCreateBuffer(gpu_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 
                              4 * sizeof(struct t_complex), gate->data, &err);
     if (err != CL_SUCCESS) {
-        /* Fallback to CPU */
         long step = 1L << target_qubit;
         long block_size = 1L << (target_qubit + 1);
         long i, j;
@@ -669,18 +651,15 @@ void q_apply_1q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate,
         return;
     }
     
-    /* Set kernel arguments */
     clSetKernelArg(gate_1q_kernel, 0, sizeof(cl_mem), &persistent_state_buffer);
     clSetKernelArg(gate_1q_kernel, 1, sizeof(cl_mem), &persistent_scratch_buffer);
     clSetKernelArg(gate_1q_kernel, 2, sizeof(cl_mem), &gate_buf);
     clSetKernelArg(gate_1q_kernel, 3, sizeof(int), &target_qubit);
     clSetKernelArg(gate_1q_kernel, 4, sizeof(int), &size);
     
-    /* Execute kernel */
     err = clEnqueueNDRangeKernel(gpu_queue, gate_1q_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
     if (err != CL_SUCCESS) {
         clReleaseMemObject(gate_buf);
-        /* Fallback to CPU */
         long step = 1L << target_qubit;
         long block_size = 1L << (target_qubit + 1);
         long i, j;
@@ -708,22 +687,27 @@ void q_apply_1q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate,
         return;
     }
     
-    /* Swap buffers for next operation */
     cl_mem temp = persistent_state_buffer;
     persistent_state_buffer = persistent_scratch_buffer;
     persistent_scratch_buffer = temp;
     
-    /* Cleanup */
     clReleaseMemObject(gate_buf);
 }
 
+/**
+ * GPU-accelerated 2-qubit quantum gate application using persistent memory
+ * @param state Quantum state vector
+ * @param gate 4x4 gate matrix
+ * @param control_qubit Control qubit index
+ * @param target_qubit Target qubit index
+ */
 void q_apply_2q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate, 
                          int control_qubit, int target_qubit) {
     long size = state->size;
     cl_int err;
     cl_mem gate_buf;
     size_t global_size = size;
-    size_t local_size = 256; /* Increased work group size */
+    size_t local_size = 256;
     
     if (state == NULL || gate == NULL || control_qubit < 0 || target_qubit < 0 ||
         control_qubit >= state->qubits_num || target_qubit >= state->qubits_num) {
@@ -731,16 +715,14 @@ void q_apply_2q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate,
         return;
     }
     
-    /* Initialize GPU context if not already done */
     if (!gpu_initialized) {
         if (!init_gpu_context()) {
-            /* Fallback to CPU */
             long c_bit = 1L << control_qubit;
             long t_bit = 1L << target_qubit;
             long i;
             
             for (i = 0; i < size; i++) {
-                if ((i & c_bit) != 0) {  /* Control qubit is |1⟩ */
+                if ((i & c_bit) != 0) {  
                     long index00 = i & ~t_bit;
                     long index01 = i | t_bit;
                     long index10 = (i & ~t_bit) | c_bit;
@@ -752,7 +734,6 @@ void q_apply_2q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate,
                         struct t_complex v10 = state->vector[index10];
                         struct t_complex v11 = state->vector[index11];
                         
-                        /* Apply 4x4 gate matrix */
                         state->scratch_vector[index00] = c_add(c_add(c_mul(gate->data[0], v00), c_mul(gate->data[1], v01)), 
                                                               c_add(c_mul(gate->data[2], v10), c_mul(gate->data[3], v11)));
                         state->scratch_vector[index01] = c_add(c_add(c_mul(gate->data[4], v00), c_mul(gate->data[5], v01)), 
@@ -773,15 +754,13 @@ void q_apply_2q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate,
         gpu_initialized = 1;
     }
     
-    /* Initialize persistent GPU memory */
     if (!init_persistent_gpu_memory(size)) {
-        /* Fallback to CPU */
         long c_bit = 1L << control_qubit;
         long t_bit = 1L << target_qubit;
         long i;
         
         for (i = 0; i < size; i++) {
-            if ((i & c_bit) != 0) {  /* Control qubit is |1⟩ */
+            if ((i & c_bit) != 0) { 
                 long index00 = i & ~t_bit;
                 long index01 = i | t_bit;
                 long index10 = (i & ~t_bit) | c_bit;
@@ -793,7 +772,6 @@ void q_apply_2q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate,
                     struct t_complex v10 = state->vector[index10];
                     struct t_complex v11 = state->vector[index11];
                     
-                    /* Apply 4x4 gate matrix */
                     state->scratch_vector[index00] = c_add(c_add(c_mul(gate->data[0], v00), c_mul(gate->data[1], v01)), 
                                                           c_add(c_mul(gate->data[2], v10), c_mul(gate->data[3], v11)));
                     state->scratch_vector[index01] = c_add(c_add(c_mul(gate->data[4], v00), c_mul(gate->data[5], v01)), 
@@ -812,17 +790,15 @@ void q_apply_2q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate,
         return;
     }
     
-    /* Upload state to GPU (only if not already there) */
     static long last_uploaded_size = 0;
     if (last_uploaded_size != size) {
         if (!upload_state_to_gpu(state)) {
-            /* Fallback to CPU */
             long c_bit = 1L << control_qubit;
             long t_bit = 1L << target_qubit;
             long i;
             
             for (i = 0; i < size; i++) {
-                if ((i & c_bit) != 0) {  /* Control qubit is |1⟩ */
+                if ((i & c_bit) != 0) { 
                     long index00 = i & ~t_bit;
                     long index01 = i | t_bit;
                     long index10 = (i & ~t_bit) | c_bit;
@@ -834,7 +810,6 @@ void q_apply_2q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate,
                         struct t_complex v10 = state->vector[index10];
                         struct t_complex v11 = state->vector[index11];
                         
-                        /* Apply 4x4 gate matrix */
                         state->scratch_vector[index00] = c_add(c_add(c_mul(gate->data[0], v00), c_mul(gate->data[1], v01)), 
                                                               c_add(c_mul(gate->data[2], v10), c_mul(gate->data[3], v11)));
                         state->scratch_vector[index01] = c_add(c_add(c_mul(gate->data[4], v00), c_mul(gate->data[5], v01)), 
@@ -855,17 +830,15 @@ void q_apply_2q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate,
         last_uploaded_size = size;
     }
     
-    /* Create gate matrix buffer */
     gate_buf = clCreateBuffer(gpu_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 
                              16 * sizeof(struct t_complex), gate->data, &err);
     if (err != CL_SUCCESS) {
-        /* Fallback to CPU */
         long c_bit = 1L << control_qubit;
         long t_bit = 1L << target_qubit;
         long i;
         
         for (i = 0; i < size; i++) {
-            if ((i & c_bit) != 0) {  /* Control qubit is |1⟩ */
+            if ((i & c_bit) != 0) { 
                 long index00 = i & ~t_bit;
                 long index01 = i | t_bit;
                 long index10 = (i & ~t_bit) | c_bit;
@@ -877,7 +850,6 @@ void q_apply_2q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate,
                     struct t_complex v10 = state->vector[index10];
                     struct t_complex v11 = state->vector[index11];
                     
-                    /* Apply 4x4 gate matrix */
                     state->scratch_vector[index00] = c_add(c_add(c_mul(gate->data[0], v00), c_mul(gate->data[1], v01)), 
                                                           c_add(c_mul(gate->data[2], v10), c_mul(gate->data[3], v11)));
                     state->scratch_vector[index01] = c_add(c_add(c_mul(gate->data[4], v00), c_mul(gate->data[5], v01)), 
@@ -896,7 +868,6 @@ void q_apply_2q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate,
         return;
     }
     
-    /* Set kernel arguments */
     clSetKernelArg(gate_2q_kernel, 0, sizeof(cl_mem), &persistent_state_buffer);
     clSetKernelArg(gate_2q_kernel, 1, sizeof(cl_mem), &persistent_scratch_buffer);
     clSetKernelArg(gate_2q_kernel, 2, sizeof(cl_mem), &gate_buf);
@@ -904,17 +875,15 @@ void q_apply_2q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate,
     clSetKernelArg(gate_2q_kernel, 4, sizeof(int), &target_qubit);
     clSetKernelArg(gate_2q_kernel, 5, sizeof(int), &size);
     
-    /* Execute kernel */
     err = clEnqueueNDRangeKernel(gpu_queue, gate_2q_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
     if (err != CL_SUCCESS) {
         clReleaseMemObject(gate_buf);
-        /* Fallback to CPU */
         long c_bit = 1L << control_qubit;
         long t_bit = 1L << target_qubit;
         long i;
         
         for (i = 0; i < size; i++) {
-            if ((i & c_bit) != 0) {  /* Control qubit is |1⟩ */
+            if ((i & c_bit) != 0) { 
                 long index00 = i & ~t_bit;
                 long index01 = i | t_bit;
                 long index10 = (i & ~t_bit) | c_bit;
@@ -926,7 +895,6 @@ void q_apply_2q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate,
                     struct t_complex v10 = state->vector[index10];
                     struct t_complex v11 = state->vector[index11];
                     
-                    /* Apply 4x4 gate matrix */
                     state->scratch_vector[index00] = c_add(c_add(c_mul(gate->data[0], v00), c_mul(gate->data[1], v01)), 
                                                           c_add(c_mul(gate->data[2], v10), c_mul(gate->data[3], v11)));
                     state->scratch_vector[index01] = c_add(c_add(c_mul(gate->data[4], v00), c_mul(gate->data[5], v01)), 
@@ -945,11 +913,9 @@ void q_apply_2q_gate_gpu(struct t_q_state *state, const struct t_q_matrix *gate,
         return;
     }
     
-    /* Swap buffers for next operation */
     cl_mem temp = persistent_state_buffer;
     persistent_state_buffer = persistent_scratch_buffer;
     persistent_scratch_buffer = temp;
     
-    /* Cleanup */
     clReleaseMemObject(gate_buf);
 }

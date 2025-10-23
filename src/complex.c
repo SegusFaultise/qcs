@@ -1,7 +1,6 @@
 #include "internal.h"
 #include <math.h>
 
-/* SIMD support - check for AVX2 availability */
 #ifdef __AVX2__
 #include <immintrin.h>
 #define SIMD_AVAILABLE 1
@@ -9,13 +8,18 @@
 #define SIMD_AVAILABLE 0
 #endif
 
-/* GPU support - OpenMP GPU offloading */
 #ifdef _OPENMP
 #define GPU_AVAILABLE 1
 #else
 #define GPU_AVAILABLE 0
 #endif
 
+/**
+ * Add two complex numbers
+ * @param a First complex number
+ * @param b Second complex number
+ * @return Sum of a and b
+ */
 struct t_complex c_add(struct t_complex a, struct t_complex b) {
   struct t_complex result;
 
@@ -34,6 +38,12 @@ struct t_complex c_sub(struct t_complex a, struct t_complex b) {
   return result;
 }
 
+/**
+ * Multiply two complex numbers
+ * @param a First complex number
+ * @param b Second complex number
+ * @return Product of a and b
+ */
 struct t_complex c_mul(struct t_complex a, struct t_complex b) {
   struct t_complex result;
 

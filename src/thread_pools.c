@@ -6,6 +6,14 @@
 
 static void *worker_thread_function(void *pool_ptr);
 
+/**
+ * Calculate work range for a thread in parallel processing
+ * @param total_size Total number of elements to process
+ * @param num_threads Number of threads
+ * @param thread_id Current thread ID
+ * @param start Output start index for this thread
+ * @param end Output end index for this thread
+ */
 void get_thread_work_range(long total_size, int num_threads, int thread_id,
                            long *start, long *end) {
   long chunk_size = total_size / num_threads;
@@ -13,6 +21,12 @@ void get_thread_work_range(long total_size, int num_threads, int thread_id,
   *end = (thread_id == num_threads - 1) ? total_size : (*start) + chunk_size;
 }
 
+/**
+ * Create a thread pool for parallel processing
+ * @param num_threads Number of worker threads
+ * @param queue_size Size of task queue
+ * @return Pointer to created thread pool or NULL on failure
+ */
 thread_pool_t *thread_pool_create(int num_threads, int queue_size) {
   thread_pool_t *pool;
   int i;
@@ -71,13 +85,16 @@ int thread_pool_add_task(thread_pool_t *pool, void (*function)(void *),
   pool->task_count++;
   pool->active_tasks++;
 
-  /* Use broadcast instead of signal for better performance with multiple threads */
   pthread_cond_broadcast(&(pool->notify));
   pthread_mutex_unlock(&(pool->lock));
 
   return 0;
 }
 
+/**
+ * Wait for all tasks in thread pool to complete
+ * @param pool Thread pool to wait for
+ */
 void thread_pool_wait(thread_pool_t *pool) {
   pthread_mutex_lock(&(pool->lock));
 
@@ -88,6 +105,11 @@ void thread_pool_wait(thread_pool_t *pool) {
   pthread_mutex_unlock(&(pool->lock));
 }
 
+/**
+ * Destroy thread pool and free all associated resources
+ * @param pool Thread pool to destroy
+ * @return 0 on success, -1 on failure
+ */
 int thread_pool_destroy(thread_pool_t *pool) {
   int i;
 
@@ -114,6 +136,11 @@ int thread_pool_destroy(thread_pool_t *pool) {
   return 0;
 }
 
+/**
+ * Worker thread function that processes tasks from the queue
+ * @param pool_ptr Pointer to thread pool
+ * @return NULL on exit
+ */
 static void *worker_thread_function(void *pool_ptr) {
   thread_pool_t *pool = (thread_pool_t *)pool_ptr;
   struct t_task task;

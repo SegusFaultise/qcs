@@ -10,13 +10,9 @@ LDFLAGS = -lm -pthread -fopenmp -lOpenCL
 AR = ar
 ARFLAGS = rcs
 
-# Single header approach - include all source files
-# Parallelization mode is selected at compile time with preprocessor definitions
-# Default: sequential (no parallelization overhead)
-# Options: QCS_MULTI_THREAD, QCS_CPU_OPENMP, QCS_GPU_OPENCL, QCS_SIMD_ONLY
+
 PARALLEL_MODE ?= 
 
-# Add parallelization-specific flags
 ifeq ($(PARALLEL_MODE),QCS_MULTI_THREAD)
   CFLAGS += -DQCS_MULTI_THREAD
   LDFLAGS += -pthread
@@ -38,7 +34,6 @@ endif
 
 LOG_FILE = $(LOG_DIR)/$(TARGET).build_log
 
-# Include all source files - parallelization is handled by preprocessor definitions
 LIB_SRCS  := $(filter-out $(SRC_DIR)/main.c, $(wildcard $(SRC_DIR)/*.c))
 MAIN_SRC  := $(SRC_DIR)/main.c
 
@@ -90,7 +85,6 @@ clean:
 	@$(RM) -r $(PROFILE_DIR)
 	@$(RM) -r $(LOG_DIR)
 	@$(RM) -f gmon.out callgraph.dot
-	@$(RM) -f qcs.h test_bundle test_bundle.c
 	@$(MAKE) -C test clean
 
 newdir:
