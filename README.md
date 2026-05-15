@@ -24,12 +24,6 @@ QCS (Quantum Circuit Simulator) is a high-performance library designed for class
 
 The library uses the **state vector simulation** model with **persistent GPU memory** and **optimized OpenCL kernels** for quantum gate operations. It provides **complete parallelization support** including Sequential, Multi-threading (pthread), OpenMP, SIMD (AVX2), and GPU (OpenCL) modes for maximum performance across different hardware.
 
-### **Performance Highlights**
-- **GPU Acceleration**: 1.5x speedup with OpenCL optimization
-- **Complete Documentation**: 50+ functions with JSDoc-style comments
-- **Multiple Parallelization Modes**: Choose the best for your hardware
-- **Professional Code Quality**: Clean, maintainable, production-ready code
-
 ### Single-Header Distribution
 
 The library is distributed as a single file, **`qcs.h`**, making integration into your project as simple as dropping the file into your source tree and adding two lines of code. No complex build systems or installation steps required for users.
